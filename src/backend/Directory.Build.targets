@@ -1,0 +1,31 @@
+<Project>
+
+  <!--
+    Enforce Clean Architecture layering at build time.
+    Domain projects must not reference Application or Infrastructure.
+    Application projects must not reference Infrastructure.
+  -->
+  <Target Name="EnforceLayerDependencies" BeforeTargets="Build"
+          Condition="'$(MSBuildProjectName)' != ''">
+
+    <Error
+      Condition="$(MSBuildProjectName.EndsWith('.Domain')) AND
+                 '@(ProjectReference)' != '' AND
+                 $([System.String]::new('@(ProjectReference)').Contains('.Application'))"
+      Text="[Architecture] Domain projects must not reference Application projects." />
+
+    <Error
+      Condition="$(MSBuildProjectName.EndsWith('.Domain')) AND
+                 '@(ProjectReference)' != '' AND
+                 $([System.String]::new('@(ProjectReference)').Contains('.Infrastructure'))"
+      Text="[Architecture] Domain projects must not reference Infrastructure projects." />
+
+    <Error
+      Condition="$(MSBuildProjectName.EndsWith('.Application')) AND
+                 '@(ProjectReference)' != '' AND
+                 $([System.String]::new('@(ProjectReference)').Contains('.Infrastructure'))"
+      Text="[Architecture] Application projects must not reference Infrastructure projects." />
+
+  </Target>
+
+</Project>

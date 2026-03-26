@@ -1,0 +1,142 @@
+version: "3.9"
+
+services:
+
+  postgres:
+    image: postgres:16-alpine
+    container_name: rbac_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: rbac
+      POSTGRES_USER: rbac_user
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-dev_password_change_me}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./scripts/db-init.sql:/docker-entrypoint-initdb.d/01-init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U rbac_user -d rbac"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: rbac_redis
+    restart: unless-stopped
+    command: >
+      redis-server
+      --save 60 1
+      --save 300 10
+      --appendonly yes
+      --appendfsync everysec
+      --requirepass ${REDIS_PASSWORD:-dev_redis_change_me}
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD:-dev_redis_change_me}", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  jaeger:
+    image: jaegertracing/all-in-one:1.55
+    container_name: rbac_jaeger
+    restart: unless-stopped
+    environment:
+      COLLECTOR_OTLP_ENABLED: "true"
+    ports:
+      - "16686:16686"   # Jaeger UI
+      - "4317:4317"     # OTLP gRPC
+      - "4318:4318"     # OTLP HTTP
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:14269/"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+
+  prometheus:
+    image: prom/prometheus:v2.49.0
+    container_name: rbac_prometheus
+    restart: unless-stopped
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.retention.time=15d"
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./scripts/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:9090/-/healthy"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+
+  grafana:
+    image: grafana/grafana:10.3.0
+    container_name: rbac_grafana
+    restart: unless-stopped
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_PASSWORD:-dev_grafana_change_me}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+    ports:
+      - "3000:3000"
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./scripts/grafana/provisioning:/etc/grafana/provisioning:ro
+    depends_on:
+      prometheus:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:3000/api/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+
+  api:
+    build:
+      context: .
+      dockerfile: src/RbacSystem.Api/Dockerfile
+    container_name: rbac_api
+    restart: unless-stopped
+    environment:
+      ASPNETCORE_ENVIRONMENT: Development
+      ASPNETCORE_URLS: http://+:8080
+      DB_PASSWORD: ${DB_PASSWORD:-dev_password_change_me}
+      JWT_SECRET: ${JWT_SECRET:-dev_jwt_secret_must_be_32_chars_min}
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-dev_redis_change_me}
+      ConnectionStrings__Redis: "redis:6379,password=${REDIS_PASSWORD:-dev_redis_change_me}"
+      ConnectionStrings__Identity: "Host=postgres;Port=5432;Database=rbac;Username=rbac_user;Password=${DB_PASSWORD:-dev_password_change_me};Search Path=identity"
+      ConnectionStrings__TenantManagement: "Host=postgres;Port=5432;Database=rbac;Username=rbac_user;Password=${DB_PASSWORD:-dev_password_change_me};Search Path=tenant"
+      ConnectionStrings__RbacCore: "Host=postgres;Port=5432;Database=rbac;Username=rbac_user;Password=${DB_PASSWORD:-dev_password_change_me};Search Path=rbac"
+      ConnectionStrings__PolicyEngine: "Host=postgres;Port=5432;Database=rbac;Username=rbac_user;Password=${DB_PASSWORD:-dev_password_change_me};Search Path=policy"
+      ConnectionStrings__Delegation: "Host=postgres;Port=5432;Database=rbac;Username=rbac_user;Password=${DB_PASSWORD:-dev_password_change_me};Search Path=delegation"
+      ConnectionStrings__AuditLogging: "Host=postgres;Port=5432;Database=rbac;Username=rbac_user;Password=${DB_PASSWORD:-dev_password_change_me};Search Path=audit"
+      Jwt__Issuer: rbac-system
+      Jwt__Audience: rbac-clients
+      Jwt__Secret: ${JWT_SECRET:-dev_jwt_secret_must_be_32_chars_min}
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://jaeger:4317
+      OTEL_SERVICE_NAME: rbac-system
+    ports:
+      - "8080:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:8080/health"]
+      interval: 20s
+      timeout: 10s
+      retries: 5
+
+volumes:
+  postgres_data:
+  redis_data:
+  prometheus_data:
+  grafana_data:

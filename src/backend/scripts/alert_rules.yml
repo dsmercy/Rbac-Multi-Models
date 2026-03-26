@@ -1,0 +1,58 @@
+groups:
+  - name: rbac_alerts
+    rules:
+
+      # Denial rate > 10% over 5 minutes — potential attack or misconfiguration
+      - alert: HighPermissionDenialRate
+        expr: |
+          (
+            rate(rbac_eval_total{result="denied"}[5m])
+            /
+            rate(rbac_eval_total[5m])
+          ) > 0.10
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High permission denial rate ({{ $value | humanizePercentage }})"
+          description: "More than 10% of permission checks are being denied over the last 5 minutes."
+
+      # P99 evaluation latency > 200ms
+      - alert: SlowPermissionEvaluation
+        expr: histogram_quantile(0.99, rate(rbac_eval_duration_ms_bucket[5m])) > 200
+        for: 3m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Permission evaluation P99 latency too high ({{ $value }}ms)"
+          description: "P99 evaluation latency exceeds 200ms threshold."
+
+      # Any policy evaluation errors
+      - alert: PolicyEvaluationErrors
+        expr: increase(rbac_policy_eval_errors_total[2m]) > 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Policy evaluation errors detected"
+          description: "Policy engine is producing errors — access decisions may be incorrect."
+
+      # Redis connectivity lost
+      - alert: RedisConnectivityLost
+        expr: rbac_cache_evictions_total == 0 and on() absent(rbac_eval_total{cache_hit="true"})
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Redis connectivity may be lost"
+          description: "No cache hits detected — Redis may be unavailable."
+
+      # Delegation chain depth at platform maximum
+      - alert: DelegationChainMaxDepthDetected
+        expr: rbac_delegation_chain_max_depth_total > 0
+        for: 0m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Delegation chain at maximum configured depth"
+          description: "A delegation at the maximum allowed chain depth was detected."

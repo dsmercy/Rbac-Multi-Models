@@ -1,0 +1,44 @@
+using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Metadata.Builders;
+using RbacCore.Domain.Entities;
+
+namespace RbacCore.Infrastructure.Persistence.Configurations;
+
+public sealed class PermissionEntityConfiguration : IEntityTypeConfiguration<Permission>
+{
+    public void Configure(EntityTypeBuilder<Permission> builder)
+    {
+        builder.ToTable("Permissions", "rbac");
+        builder.HasKey(p => p.Id);
+        builder.Property(p => p.Id).ValueGeneratedNever();
+        builder.Property(p => p.TenantId).IsRequired();
+
+        builder.OwnsOne(p => p.Code, code =>
+        {
+            code.Property(c => c.Value)
+                .HasColumnName("Code")
+                .HasMaxLength(100)
+                .IsRequired();
+        });
+
+        builder.Property(p => p.ResourceType).HasMaxLength(100).IsRequired();
+        builder.Property(p => p.Action).HasMaxLength(100).IsRequired();
+        builder.Property(p => p.Description).HasMaxLength(500).IsRequired(false);
+        builder.Property(p => p.IsDeleted).HasDefaultValue(false).IsRequired();
+        builder.Property(p => p.DeletedAt).IsRequired(false);
+        builder.Property(p => p.DeletedBy).IsRequired(false);
+        builder.Property(p => p.CreatedAt).IsRequired();
+        builder.Property(p => p.CreatedBy).IsRequired();
+        builder.Property(p => p.UpdatedAt).IsRequired(false);
+        builder.Property(p => p.UpdatedBy).IsRequired(false);
+
+        // Unique code per tenant
+        builder.HasIndex(new[] { "TenantId", "Code_Value" })
+            .IsUnique()
+            .HasDatabaseName("UQ_Permissions_TenantId_Code")
+            .HasFilter("\"IsDeleted\" = false");
+
+        builder.HasIndex(p => new { p.TenantId, p.IsDeleted })
+            .HasDatabaseName("IX_Permissions_TenantId_IsDeleted");
+    }
+}

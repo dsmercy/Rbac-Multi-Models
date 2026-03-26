@@ -1,0 +1,43 @@
+## .NET / Visual Studio
+bin/
+obj/
+*.user
+*.suo
+.vs/
+*.userprefs
+*.ncrunchproject
+TestResults/
+artifacts/
+
+## NuGet
+*.nupkg
+*.snupkg
+project.lock.json
+packages/
+.nuget/
+
+## Secrets & environment
+.env
+appsettings.Development.json
+appsettings.Local.json
+**/secrets.json
+
+## Rider / JetBrains
+.idea/
+*.sln.iml
+
+## VS Code
+.vscode/
+*.code-workspace
+
+## Docker
+docker-compose.override.yml
+
+## OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+## Logs
+logs/
+*.log

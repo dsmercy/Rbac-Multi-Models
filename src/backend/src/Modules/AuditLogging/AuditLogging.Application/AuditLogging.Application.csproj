@@ -1,0 +1,24 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <TreatWarningsAsErrors>false</TreatWarningsAsErrors>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../AuditLogging.Domain/AuditLogging.Domain.csproj" />
+    <ProjectReference Include="../../../BuildingBlocks/BuildingBlocks.Application/BuildingBlocks.Application.csproj" />
+    <ProjectReference Include="../../Identity/Identity.Domain/Identity.Domain.csproj" />
+    <ProjectReference Include="../../RbacCore/RbacCore.Domain/RbacCore.Domain.csproj" />
+    <ProjectReference Include="../../PolicyEngine/PolicyEngine.Domain/PolicyEngine.Domain.csproj" />
+    <ProjectReference Include="../../Delegation/Delegation.Domain/Delegation.Domain.csproj" />
+    <ProjectReference Include="../../TenantManagement/TenantManagement.Domain/TenantManagement.Domain.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="MediatR" Version="12.2.0" />
+  </ItemGroup>
+
+</Project>
