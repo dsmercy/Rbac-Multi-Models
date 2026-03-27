@@ -13,12 +13,18 @@ public sealed class PermissionEntityConfiguration : IEntityTypeConfiguration<Per
         builder.Property(p => p.Id).ValueGeneratedNever();
         builder.Property(p => p.TenantId).IsRequired();
 
+        // Unique code index defined inside OwnsOne so EF can resolve
+        // the owned property type at design time.
         builder.OwnsOne(p => p.Code, code =>
         {
             code.Property(c => c.Value)
                 .HasColumnName("Code")
                 .HasMaxLength(100)
                 .IsRequired();
+
+            code.HasIndex(c => c.Value)
+                .HasDatabaseName("IX_Permissions_Code")
+                .IsUnique();
         });
 
         builder.Property(p => p.ResourceType).HasMaxLength(100).IsRequired();
@@ -31,12 +37,6 @@ public sealed class PermissionEntityConfiguration : IEntityTypeConfiguration<Per
         builder.Property(p => p.CreatedBy).IsRequired();
         builder.Property(p => p.UpdatedAt).IsRequired(false);
         builder.Property(p => p.UpdatedBy).IsRequired(false);
-
-        // Unique code per tenant
-        builder.HasIndex(new[] { "TenantId", "Code_Value" })
-            .IsUnique()
-            .HasDatabaseName("UQ_Permissions_TenantId_Code")
-            .HasFilter("\"IsDeleted\" = false");
 
         builder.HasIndex(p => new { p.TenantId, p.IsDeleted })
             .HasDatabaseName("IX_Permissions_TenantId_IsDeleted");

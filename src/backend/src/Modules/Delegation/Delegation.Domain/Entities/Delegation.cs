@@ -1,3 +1,4 @@
+using System.ComponentModel.DataAnnotations.Schema;
 using BuildingBlocks.Domain;
 using Delegation.Domain.Events;
 
@@ -8,7 +9,14 @@ public sealed class DelegationGrant : AuditableEntity
     public Guid TenantId { get; private set; }
     public Guid DelegatorId { get; private set; }
     public Guid DelegateeId { get; private set; }
-    public IReadOnlyList<string> PermissionCodes { get; private set; } = [];
+
+    // _permissionCodes is the field EF Core maps (List<string> is writable).
+    // PermissionCodes is [NotMapped] so EF never touches the read-only property.
+    internal List<string> _permissionCodes = [];
+
+    [NotMapped]
+    public IReadOnlyList<string> PermissionCodes => _permissionCodes.AsReadOnly();
+
     public Guid ScopeId { get; private set; }
     public DateTimeOffset ExpiresAt { get; private set; }
     public int ChainDepth { get; private set; }
@@ -50,13 +58,15 @@ public sealed class DelegationGrant : AuditableEntity
             TenantId = tenantId,
             DelegatorId = delegatorId,
             DelegateeId = delegateeId,
-            PermissionCodes = permissionCodes,
             ScopeId = scopeId,
             ExpiresAt = expiresAt,
             ChainDepth = chainDepth,
             IsRevoked = false,
             CreatedBy = createdByUserId
         };
+
+        // Assign backing field directly — PermissionCodes property is read-only
+        delegation._permissionCodes = permissionCodes.ToList();
 
         delegation.AddDomainEvent(new DelegationCreatedEvent(
             delegation.Id, tenantId, delegatorId, delegateeId,

@@ -4,7 +4,6 @@ using BuildingBlocks.Infrastructure;
 using Delegation.Infrastructure;
 using Identity.Infrastructure;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
-using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.IdentityModel.Tokens;
 using PermissionEngine.Infrastructure;
 using PolicyEngine.Infrastructure;
@@ -39,7 +38,7 @@ builder.Services
             ValidIssuer = builder.Configuration["Jwt:Issuer"],
             ValidAudience = builder.Configuration["Jwt:Audience"],
             IssuerSigningKey = new SymmetricSecurityKey(
-                Encoding.UTF8.GetBytes(builder.Configuration["Jwt:Secret"]!)),
+                Encoding.UTF8.GetBytes(builder.Configuration["Jwt:SigningKey"]!)),
             ClockSkew = TimeSpan.FromSeconds(30)
         };
     });
@@ -84,14 +83,14 @@ builder.Services.AddSwaggerGen(c =>
 });
 
 // ── Rate limiting ─────────────────────────────────────────────────────────────
-builder.Services.AddRateLimiter(options =>
-{
-    options.AddFixedWindowLimiter("per-user", cfg =>
-    {
-        cfg.PermitLimit = 300;
-        cfg.Window = TimeSpan.FromMinutes(1);
-    });
-});
+//builder.Services.AddRateLimiter(options =>
+//{
+//    options.AddFixedWindowLimiter("per-user", cfg =>
+//    {
+//        cfg.PermitLimit = 300;
+//        cfg.Window = TimeSpan.FromMinutes(1);
+//    });
+//});
 
 var app = builder.Build();
 
@@ -110,7 +109,7 @@ app.Use(async (ctx, next) =>
     await next();
 });
 
-app.UseRateLimiter();
+//app.UseRateLimiter();
 app.UseAuthentication();
 app.UseAuthorization();
 app.UseMiddleware<TenantValidationMiddleware>();

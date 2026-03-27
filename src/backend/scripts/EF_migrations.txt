@@ -1,0 +1,28 @@
+Step 1 — Add Migrations (run once)
+
+dotnet ef migrations add InitialCreate --project src/Modules/Identity/Identity.Infrastructure --startup-project src/RbacSystem.Api --context IdentityDbContext --output-dir Persistence/Migrations
+
+dotnet ef migrations add InitialCreate --project src/Modules/TenantManagement/TenantManagement.Infrastructure --startup-project src/RbacSystem.Api --context TenantDbContext --output-dir Persistence/Migrations
+
+dotnet ef migrations add InitialCreate --project src/Modules/RbacCore/RbacCore.Infrastructure --startup-project src/RbacSystem.Api --context RbacDbContext --output-dir Persistence/Migrations
+
+dotnet ef migrations add InitialCreate --project src/Modules/PolicyEngine/PolicyEngine.Infrastructure --startup-project src/RbacSystem.Api --context PolicyDbContext --output-dir Persistence/Migrations
+
+dotnet ef migrations add InitialCreate --project src/Modules/Delegation/Delegation.Infrastructure --startup-project src/RbacSystem.Api --context DelegationDbContext --output-dir Persistence/Migrations
+
+dotnet ef migrations add InitialCreate --project src/Modules/AuditLogging/AuditLogging.Infrastructure --startup-project src/RbacSystem.Api --context AuditDbContext --output-dir Persistence/Migrations
+
+
+Step 2 — Apply to Database (creates all tables)
+
+dotnet ef database update --project src/Modules/Identity/Identity.Infrastructure --startup-project src/RbacSystem.Api --context IdentityDbContext
+
+dotnet ef database update --project src/Modules/TenantManagement/TenantManagement.Infrastructure --startup-project src/RbacSystem.Api --context TenantDbContext
+
+dotnet ef database update --project src/Modules/RbacCore/RbacCore.Infrastructure --startup-project src/RbacSystem.Api --context RbacDbContext
+
+dotnet ef database update --project src/Modules/PolicyEngine/PolicyEngine.Infrastructure --startup-project src/RbacSystem.Api --context PolicyDbContext
+
+dotnet ef database update --project src/Modules/Delegation/Delegation.Infrastructure --startup-project src/RbacSystem.Api --context DelegationDbContext
+
+dotnet ef database update --project src/Modules/AuditLogging/AuditLogging.Infrastructure --startup-project src/RbacSystem.Api --context AuditDbContext

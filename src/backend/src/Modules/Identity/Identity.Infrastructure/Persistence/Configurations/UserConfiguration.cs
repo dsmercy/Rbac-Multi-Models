@@ -1,5 +1,4 @@
 using Identity.Domain.Entities;
-using Identity.Domain.ValueObjects;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 
@@ -21,12 +20,21 @@ public sealed class UserConfiguration : IEntityTypeConfiguration<User>
             .HasColumnName("tenant_id")
             .IsRequired();
 
+        // OwnsOne: Email.Value is a shadow property inside the owned type.
+        // The unique-per-tenant index is defined inside this block so EF
+        // already knows the property type — no string-based HasIndex needed.
         builder.OwnsOne(u => u.Email, email =>
         {
             email.Property(e => e.Value)
                 .HasColumnName("email")
                 .HasMaxLength(320)
                 .IsRequired();
+
+            // Unique email index per tenant — defined inside OwnsOne so EF
+            // can resolve the owned property type at design time.
+            email.HasIndex(e => e.Value)
+                .HasDatabaseName("ix_users_email")
+                .IsUnique();
         });
 
         builder.OwnsOne(u => u.DisplayName, dn =>
@@ -73,11 +81,6 @@ public sealed class UserConfiguration : IEntityTypeConfiguration<User>
 
         builder.Property(u => u.UpdatedBy)
             .HasColumnName("updated_by");
-
-        // Unique email per tenant
-        builder.HasIndex(u => new { u.TenantId, u.Email })
-            .HasDatabaseName("ix_users_tenant_email")
-            .IsUnique();
 
         // Hot-path: tenant filtering
         builder.HasIndex(u => u.TenantId)

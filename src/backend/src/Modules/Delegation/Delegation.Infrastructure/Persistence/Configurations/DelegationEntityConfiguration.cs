@@ -25,12 +25,15 @@ public sealed class DelegationEntityConfiguration
         builder.Property(d => d.UpdatedAt).IsRequired(false);
         builder.Property(d => d.UpdatedBy).IsRequired(false);
 
-        // PermissionCodes stored as PostgreSQL text array
-        builder.Property(d => d.PermissionCodes)
+        // Map the backing field _permissionCodes directly by field name.
+        // PermissionCodes property is [NotMapped] so EF never sees the
+        // read-only interface. The field is List<string> — writable by EF.
+        builder.PrimitiveCollection("_permissionCodes")
+            .HasColumnName("permission_codes")
             .HasColumnType("text[]")
             .IsRequired();
 
-        // Hot-path: look up active delegations for a delegatee in a tenant+scope
+        // Hot-path indexes
         builder.HasIndex(d => new { d.TenantId, d.DelegateeId, d.IsRevoked })
             .HasDatabaseName("IX_Delegations_TenantId_DelegateeId_IsRevoked");
 

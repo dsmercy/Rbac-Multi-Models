@@ -98,42 +98,42 @@ services:
       timeout: 5s
       retries: 3
 
-  api:
-    build:
-      context: .
-      dockerfile: src/RbacSystem.Api/Dockerfile
-    container_name: rbac_api
-    restart: unless-stopped
-    environment:
-      ASPNETCORE_ENVIRONMENT: Development
-      ASPNETCORE_URLS: http://+:8080
-      DB_PASSWORD: ${DB_PASSWORD:-dev_password_change_me}
-      JWT_SECRET: ${JWT_SECRET:-dev_jwt_secret_must_be_32_chars_min}
-      REDIS_PASSWORD: ${REDIS_PASSWORD:-dev_redis_change_me}
-      ConnectionStrings__Redis: "redis:6379,password=${REDIS_PASSWORD:-dev_redis_change_me}"
-      ConnectionStrings__Identity: "Host=postgres;Port=5432;Database=rbac;Username=rbac_user;Password=${DB_PASSWORD:-dev_password_change_me};Search Path=identity"
-      ConnectionStrings__TenantManagement: "Host=postgres;Port=5432;Database=rbac;Username=rbac_user;Password=${DB_PASSWORD:-dev_password_change_me};Search Path=tenant"
-      ConnectionStrings__RbacCore: "Host=postgres;Port=5432;Database=rbac;Username=rbac_user;Password=${DB_PASSWORD:-dev_password_change_me};Search Path=rbac"
-      ConnectionStrings__PolicyEngine: "Host=postgres;Port=5432;Database=rbac;Username=rbac_user;Password=${DB_PASSWORD:-dev_password_change_me};Search Path=policy"
-      ConnectionStrings__Delegation: "Host=postgres;Port=5432;Database=rbac;Username=rbac_user;Password=${DB_PASSWORD:-dev_password_change_me};Search Path=delegation"
-      ConnectionStrings__AuditLogging: "Host=postgres;Port=5432;Database=rbac;Username=rbac_user;Password=${DB_PASSWORD:-dev_password_change_me};Search Path=audit"
-      Jwt__Issuer: rbac-system
-      Jwt__Audience: rbac-clients
-      Jwt__Secret: ${JWT_SECRET:-dev_jwt_secret_must_be_32_chars_min}
-      OTEL_EXPORTER_OTLP_ENDPOINT: http://jaeger:4317
-      OTEL_SERVICE_NAME: rbac-system
-    ports:
-      - "8080:8080"
-    depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-    healthcheck:
-      test: ["CMD", "wget", "--spider", "-q", "http://localhost:8080/health"]
-      interval: 20s
-      timeout: 10s
-      retries: 5
+  # api:
+    # build:
+      # context: .
+      # dockerfile: src/RbacSystem.Api/Dockerfile
+    # container_name: rbac_api
+    # restart: unless-stopped
+    # environment:
+      # ASPNETCORE_ENVIRONMENT: Development
+      # ASPNETCORE_URLS: http://+:8080
+      # DB_PASSWORD: ${DB_PASSWORD:-dev_password_change_me}
+      # JWT_SECRET: ${JWT_SECRET:-dev_jwt_secret_must_be_32_chars_min}
+      # REDIS_PASSWORD: ${REDIS_PASSWORD:-dev_redis_change_me}
+      # ConnectionStrings__Redis: "redis:6379,password=${REDIS_PASSWORD:-dev_redis_change_me}"
+      # ConnectionStrings__Identity: "Host=postgres;Port=5432;Database=rbac;Username=rbac_user;Password=${DB_PASSWORD:-dev_password_change_me};Search Path=identity"
+      # ConnectionStrings__TenantManagement: "Host=postgres;Port=5432;Database=rbac;Username=rbac_user;Password=${DB_PASSWORD:-dev_password_change_me};Search Path=tenant"
+      # ConnectionStrings__RbacCore: "Host=postgres;Port=5432;Database=rbac;Username=rbac_user;Password=${DB_PASSWORD:-dev_password_change_me};Search Path=rbac"
+      # ConnectionStrings__PolicyEngine: "Host=postgres;Port=5432;Database=rbac;Username=rbac_user;Password=${DB_PASSWORD:-dev_password_change_me};Search Path=policy"
+      # ConnectionStrings__Delegation: "Host=postgres;Port=5432;Database=rbac;Username=rbac_user;Password=${DB_PASSWORD:-dev_password_change_me};Search Path=delegation"
+      # ConnectionStrings__AuditLogging: "Host=postgres;Port=5432;Database=rbac;Username=rbac_user;Password=${DB_PASSWORD:-dev_password_change_me};Search Path=audit"
+      # Jwt__Issuer: rbac-system
+      # Jwt__Audience: rbac-clients
+      # Jwt__Secret: ${JWT_SECRET:-dev_jwt_secret_must_be_32_chars_min}
+      # OTEL_EXPORTER_OTLP_ENDPOINT: http://jaeger:4317
+      # OTEL_SERVICE_NAME: rbac-system
+    # ports:
+      # - "8080:8080"
+    # depends_on:
+      # postgres:
+        # condition: service_healthy
+      # redis:
+        # condition: service_healthy
+    # healthcheck:
+      # test: ["CMD", "wget", "--spider", "-q", "http://localhost:8080/health"]
+      # interval: 20s
+      # timeout: 10s
+      # retries: 5
 
 volumes:
   postgres_data:

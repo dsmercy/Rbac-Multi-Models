@@ -9,21 +9,23 @@ public sealed class DelegationRepository : IDelegationRepository
 
     public DelegationRepository(DelegationDbContext context) => _context = context;
 
-    public Task<Domain.Entities.DelegationGrant> GetByIdAsync(
+    public Task<Domain.Entities.DelegationGrant?> GetByIdAsync(
         Guid delegationId, CancellationToken ct = default)
         => _context.Delegations
             .IgnoreQueryFilters()
             .FirstOrDefaultAsync(d => d.Id == delegationId, ct);
 
-    public Task<Domain.Entities.DelegationGrant> GetActiveDelegationAsync(
+    public Task<Domain.Entities.DelegationGrant?> GetActiveDelegationAsync(
         Guid delegateeId, string action, Guid scopeId, Guid tenantId,
         CancellationToken ct = default)
+        // EF.Property targets the mapped field name "_permissionCodes" because
+        // PermissionCodes is [NotMapped] and cannot be used in LINQ-to-SQL.
         => _context.Delegations
             .FirstOrDefaultAsync(d =>
                 d.TenantId == tenantId &&
                 d.DelegateeId == delegateeId &&
                 d.ScopeId == scopeId &&
-                d.PermissionCodes.Contains(action), ct);
+                EF.Property<List<string>>(d, "_permissionCodes").Contains(action), ct);
 
     public async Task<IReadOnlyList<Domain.Entities.DelegationGrant>> GetActiveByDelegateeAsync(
         Guid delegateeId, Guid tenantId, CancellationToken ct = default)

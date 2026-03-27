@@ -25,6 +25,11 @@ public sealed class TenantEntityConfiguration : IEntityTypeConfiguration<Tenant>
                 .HasColumnName("Slug")
                 .HasMaxLength(63)
                 .IsRequired();
+
+            // Unique slug defined inside OwnsOne so EF resolves the type at design time
+            slug.HasIndex(s => s.Value)
+                .HasDatabaseName("UQ_Tenants_Slug")
+                .IsUnique();
         });
 
         builder.OwnsOne(t => t.Configuration, cfg =>
@@ -76,11 +81,5 @@ public sealed class TenantEntityConfiguration : IEntityTypeConfiguration<Tenant>
 
         builder.HasIndex(t => t.IsDeleted)
             .HasDatabaseName("IX_Tenants_IsDeleted");
-
-        // Unique slug across platform
-        builder.HasIndex("Slug_Value")
-            .IsUnique()
-            .HasDatabaseName("UQ_Tenants_Slug")
-            .HasFilter("\"IsDeleted\" = false");
     }
 }
