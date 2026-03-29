@@ -14,7 +14,7 @@ public static class PermissionEngineModuleExtensions
         this IServiceCollection services,
         IConfiguration configuration)
     {
-        // Redis
+        // ── Redis ─────────────────────────────────────────────────────────────
         var redisConnection = configuration.GetConnectionString("Redis")
             ?? throw new InvalidOperationException("Redis connection string is required.");
 
@@ -23,13 +23,30 @@ public static class PermissionEngineModuleExtensions
 
         services.AddScoped<IPermissionCacheService, RedisPermissionCacheService>();
 
-        // Register all pipeline steps — order enforced by IEvaluationStep.Order
+        // ── Pipeline steps (order enforced by IEvaluationStep.Order) ─────────
+        //
+        // Step 0 — Token version validation (NEW — Phase 3)
+        services.AddScoped<IEvaluationStep, TokenVersionValidationStep>();
+
+        // Step 1 — Explicit global deny
         services.AddScoped<IEvaluationStep, GlobalDenyStep>();
+
+        // Step 2 — Resource-level override
         services.AddScoped<IEvaluationStep, ResourceLevelOverrideStep>();
+
+        // Step 3 — Delegation check
         services.AddScoped<IEvaluationStep, DelegationCheckStep>();
+
+        // Step 4 — Scope inheritance resolution
         services.AddScoped<IEvaluationStep, ScopeInheritanceStep>();
+
+        // Step 5 — ABAC policy evaluation
         services.AddScoped<IEvaluationStep, AbacPolicyStep>();
+
+        // Step 6 — Role-based permission check
         services.AddScoped<IEvaluationStep, RbacPermissionCheckStep>();
+
+        // Step 7 — Default deny (backstop — always fires if nothing else granted access)
         services.AddScoped<IEvaluationStep, DefaultDenyStep>();
 
         services.AddScoped<IPermissionEngine, PermissionEngineService>();

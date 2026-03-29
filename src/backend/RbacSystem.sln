@@ -1,6 +1,6 @@
 Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio Version 18
-VisualStudioVersion = 18.2.11408.102 d18.0
+VisualStudioVersion = 18.2.11408.102
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "BuildingBlocks", "BuildingBlocks", "{FB03B2BE-454B-51C4-7EC4-43CB694B4474}"
 EndProject
@@ -71,6 +71,10 @@ EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AuditLogging.Infrastructure", "src\Modules\AuditLogging\AuditLogging.Infrastructure\AuditLogging.Infrastructure.csproj", "{93D159FA-D0D3-3791-9100-ECB54289FE0D}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "RbacSystem.Api", "src\RbacSystem.Api\RbacSystem.Api.csproj", "{188BCE63-2399-2D7C-84E9-F4DBF9DAD525}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Tests", "Tests", "{ED7E162C-7EDA-4C29-B496-54A593598D93}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "PermissionEngine.Tests", "Tests\PermissionEngine.Tests\PermissionEngine.Tests.csproj", "{80BD7929-0FF1-D149-9944-29835A4653F8}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -178,6 +182,10 @@ Global
 		{188BCE63-2399-2D7C-84E9-F4DBF9DAD525}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{188BCE63-2399-2D7C-84E9-F4DBF9DAD525}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{188BCE63-2399-2D7C-84E9-F4DBF9DAD525}.Release|Any CPU.Build.0 = Release|Any CPU
+		{80BD7929-0FF1-D149-9944-29835A4653F8}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{80BD7929-0FF1-D149-9944-29835A4653F8}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{80BD7929-0FF1-D149-9944-29835A4653F8}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{80BD7929-0FF1-D149-9944-29835A4653F8}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -215,5 +223,9 @@ Global
 		{58079EA6-5CB9-53F2-321A-DA4EA67D5AA8} = {54EAF62B-2E43-C72D-5410-751E374DAAC8}
 		{93D159FA-D0D3-3791-9100-ECB54289FE0D} = {54EAF62B-2E43-C72D-5410-751E374DAAC8}
 		{188BCE63-2399-2D7C-84E9-F4DBF9DAD525} = {66F5CD56-561B-F898-6A94-B59426926046}
+		{80BD7929-0FF1-D149-9944-29835A4653F8} = {ED7E162C-7EDA-4C29-B496-54A593598D93}
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {68B6B2D2-2980-410D-9B06-C6C5DEEEF50F}
 	EndGlobalSection
 EndGlobal
