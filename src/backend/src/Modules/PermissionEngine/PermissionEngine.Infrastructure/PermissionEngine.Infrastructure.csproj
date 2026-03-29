@@ -10,7 +10,6 @@
   <ItemGroup>
     <ProjectReference Include="../PermissionEngine.Application/PermissionEngine.Application.csproj" />
     <ProjectReference Include="../PermissionEngine.Domain/PermissionEngine.Domain.csproj" />
-    <ProjectReference Include="../../../BuildingBlocks/BuildingBlocks.Infrastructure/BuildingBlocks.Infrastructure.csproj" />
   </ItemGroup>
 
   <ItemGroup>

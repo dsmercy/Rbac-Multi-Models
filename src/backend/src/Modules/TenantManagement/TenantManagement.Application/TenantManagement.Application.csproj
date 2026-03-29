@@ -10,14 +10,6 @@
   <ItemGroup>
     <ProjectReference Include="../TenantManagement.Domain/TenantManagement.Domain.csproj" />
     <ProjectReference Include="../../../BuildingBlocks/BuildingBlocks.Application/BuildingBlocks.Application.csproj" />
-    <ProjectReference Include="../../Identity/Identity.Application/Identity.Application.csproj" />
-    <ProjectReference Include="../../RbacCore/RbacCore.Application/RbacCore.Application.csproj" />
-  </ItemGroup>
-
-  <ItemGroup>
-    <PackageReference Include="MediatR" Version="12.2.0" />
-    <PackageReference Include="FluentValidation" Version="11.9.0" />
-    <PackageReference Include="FluentValidation.DependencyInjectionExtensions" Version="11.9.0" />
   </ItemGroup>
 
 </Project>

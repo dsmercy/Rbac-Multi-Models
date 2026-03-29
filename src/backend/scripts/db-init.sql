@@ -36,3 +36,67 @@ BEGIN
     RAISE EXCEPTION 'AuditLogs are immutable. UPDATE and DELETE operations are forbidden.';
 END;
 $$ LANGUAGE plpgsql;
+
+
+
+
+
+
+-- add super ADMIN
+
+-- Step 1: get the user ID (copy the result for steps below)
+SELECT "id" FROM identity."users"
+WHERE "email" = 'admin@acme.test';
+
+-- Step 2: insert a platform-level role (TenantId = Guid.Empty = system sentinel)
+INSERT INTO rbac."Roles" (
+    "Id", "TenantId", "Name", "Description",
+    "IsSystemRole", "IsDeleted", "CreatedAt", "CreatedBy"
+)
+VALUES (
+    '00000000-0000-0000-0000-000000000001',  -- fixed ID for platform:super-admin role
+    '00000000-0000-0000-0000-000000000000',  -- Guid.Empty = platform-level, not tenant-scoped
+    'platform:super-admin',
+    'Platform-level super admin — bypasses all tenant isolation.',
+    TRUE, FALSE, NOW(), '00000000-0000-0000-0000-000000000000'
+)
+ON CONFLICT DO NOTHING;
+
+-- Step 3: assign the role to admin@acme.test
+-- Replace <user-id> with the ID from Step 1
+INSERT INTO rbac."UserRoleAssignments" (
+    "Id",
+    "TenantId",
+    "UserId",
+    "RoleId",
+    "ScopeId",
+    "IsActive",
+    "ExpiresAt",
+    "DeactivatedReason",
+    "DeactivatedAt",
+    "IsDeleted",
+    "DeletedAt",
+    "DeletedBy",
+    "CreatedAt",
+    "CreatedBy",
+    "UpdatedAt",
+    "UpdatedBy"
+)
+VALUES (
+    gen_random_uuid(),
+    '00000000-0000-0000-0000-000000000000',
+    '<user-id>',                              -- paste the ID from Step 1
+    '00000000-0000-0000-0000-000000000001',
+    NULL,
+    TRUE,
+    NULL,
+    NULL,
+    NULL,
+    FALSE,
+    NULL,
+    NULL,
+    NOW(),
+    '00000000-0000-0000-0000-000000000000',
+    NULL,
+    NULL
+);
