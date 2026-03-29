@@ -25,4 +25,11 @@ public interface IRbacCoreService
 
     Task<IReadOnlyList<Guid>> GetAncestorScopeIdsAsync(
         Guid scopeId, Guid tenantId, CancellationToken ct = default);
+    /// <summary>
+    /// Retrieves role names for JWT generation during login.
+    /// Bypasses tenant query filter — safe because tenantIds are
+    /// supplied explicitly by the caller.
+    /// </summary>
+    Task<IReadOnlyList<string>> GetRoleNamesForLoginAsync(
+        Guid userId, Guid tenantId, CancellationToken ct = default);
 }

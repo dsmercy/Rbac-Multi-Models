@@ -10,7 +10,7 @@
   <ItemGroup>
     <ProjectReference Include="../RbacCore.Domain/RbacCore.Domain.csproj" />
     <ProjectReference Include="../../../BuildingBlocks/BuildingBlocks.Application/BuildingBlocks.Application.csproj" />
-    <ProjectReference Include="../../Identity/Identity.Application/Identity.Application.csproj" />
+    <ProjectReference Include="..\..\Identity\Identity.Application\Identity.Application.csproj" />
   </ItemGroup>
 
   <ItemGroup>

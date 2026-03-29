@@ -11,8 +11,10 @@ public sealed class UserCredentialRepository : IUserCredentialRepository
     public UserCredentialRepository(IdentityDbContext context)
         => _context = context;
 
-    public async Task<UserCredential?> GetByUserIdAsync(Guid userId, CancellationToken ct = default)
+    public async Task<UserCredential?> GetByUserIdAsync(
+        Guid userId, CancellationToken ct = default)
         => await _context.UserCredentials
+            .IgnoreQueryFilters()                    // no JWT during login
             .FirstOrDefaultAsync(uc => uc.UserId == userId, ct);
 
     public async Task AddAsync(UserCredential credential, CancellationToken ct = default)

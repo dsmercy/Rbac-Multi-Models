@@ -10,15 +10,18 @@ public sealed class RbacCoreService : IRbacCoreService
     private readonly ISender _sender;
     private readonly IRoleRepository _roleRepository;
     private readonly IScopeRepository _scopeRepository;
+    private readonly IUserRoleAssignmentRepository _assignmentRepository;
 
     public RbacCoreService(
         ISender sender,
         IRoleRepository roleRepository,
-        IScopeRepository scopeRepository)
+        IScopeRepository scopeRepository,
+        IUserRoleAssignmentRepository assignmentRepository)
     {
         _sender = sender;
         _roleRepository = roleRepository;
         _scopeRepository = scopeRepository;
+        _assignmentRepository = assignmentRepository;
     }
 
     public Task<IReadOnlyList<RoleDto>> GetUserRolesAsync(
@@ -60,4 +63,26 @@ public sealed class RbacCoreService : IRbacCoreService
     public Task<IReadOnlyList<Guid>> GetAncestorScopeIdsAsync(
         Guid scopeId, Guid tenantId, CancellationToken ct = default)
         => _scopeRepository.GetAncestorIdsAsync(scopeId, tenantId, ct);
+    public async Task<IReadOnlyList<string>> GetRoleNamesForLoginAsync(
+        Guid userId, Guid tenantId, CancellationToken ct = default)
+    {
+        // Fetch assignments for both the user's tenant AND the platform tenant
+        // (Guid.Empty = platform-level roles such as platform:super-admin)
+        var assignments = await _assignmentRepository.GetActiveByUserIgnoreFiltersAsync(
+            userId,
+            tenantIds: [tenantId, Guid.Empty],
+            ct);
+
+        var roleNames = new List<string>();
+
+        foreach (var assignment in assignments)
+        {
+            var role = await _roleRepository.GetByIdIgnoreFiltersAsync(assignment.RoleId, ct);
+
+            if (role is not null && !string.IsNullOrWhiteSpace(role.Name))
+                roleNames.Add(role.Name);
+        }
+
+        return roleNames.Distinct().ToList().AsReadOnly();
+    }
 }

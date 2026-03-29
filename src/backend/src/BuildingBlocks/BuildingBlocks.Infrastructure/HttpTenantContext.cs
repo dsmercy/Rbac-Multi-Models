@@ -17,10 +17,12 @@ public sealed class HttpTenantContext : ITenantContext
             var claim = _httpContextAccessor.HttpContext?
                 .User.FindFirst("tid")?.Value;
 
-            if (string.IsNullOrWhiteSpace(claim) || !Guid.TryParse(claim, out var tid))
-                throw new InvalidOperationException("TenantId claim is missing or invalid.");
-
-            return tid;
+            // Return Empty instead of throwing — unauthenticated requests
+            // (login, refresh) have no tid claim yet. Query filters and
+            // command handlers that receive an explicit tenantId are unaffected.
+            return string.IsNullOrWhiteSpace(claim) || !Guid.TryParse(claim, out var tid)
+                ? Guid.Empty
+                : tid;
         }
     }
 

@@ -11,8 +11,10 @@ public sealed class RefreshTokenRepository : IRefreshTokenRepository
     public RefreshTokenRepository(IdentityDbContext context)
         => _context = context;
 
-    public async Task<RefreshToken?> GetByTokenHashAsync(string tokenHash, CancellationToken ct = default)
+    public async Task<RefreshToken?> GetByTokenHashAsync(
+        string tokenHash, CancellationToken ct = default)
         => await _context.RefreshTokens
+            .IgnoreQueryFilters()                    // no JWT during token refresh
             .FirstOrDefaultAsync(rt => rt.TokenHash == tokenHash, ct);
 
     public async Task<IReadOnlyList<RefreshToken>> GetActiveByUserIdAsync(

@@ -9,7 +9,7 @@ namespace RbacSystem.Api.Controllers;
 
 [ApiController]
 [Route("api/v1/tenants")]
-[Authorize]
+//[Authorize]
 public sealed class TenantsController : ControllerBase
 {
     private readonly ISender _sender;

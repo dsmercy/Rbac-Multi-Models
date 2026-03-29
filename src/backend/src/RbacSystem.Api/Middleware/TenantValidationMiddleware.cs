@@ -27,6 +27,7 @@ public sealed class TenantValidationMiddleware
         if (routeTenantId is not null)
         {
             var isSuperAdmin = context.User.IsInRole("platform:super-admin");
+            //var isSuperAdmin = true;
 
             if (!isSuperAdmin)
             {

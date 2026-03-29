@@ -17,5 +17,12 @@ public interface IUserRoleAssignmentRepository
         Guid userId, Guid roleId, Guid tenantId, Guid? scopeId, CancellationToken ct = default);
 
     Task AddAsync(UserRoleAssignment assignment, CancellationToken ct = default);
+ 
     Task SaveChangesAsync(CancellationToken ct = default);
+    /// <summary>
+    /// Used exclusively by LoginCommandHandler — bypasses global query filter
+    /// because no JWT exists yet during authentication.
+    /// </summary>
+    Task<IReadOnlyList<UserRoleAssignment>> GetActiveByUserIgnoreFiltersAsync(
+        Guid userId, IEnumerable<Guid> tenantIds, CancellationToken ct = default);
 }

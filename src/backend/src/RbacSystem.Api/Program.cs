@@ -2,13 +2,17 @@ using AuditLogging.Infrastructure;
 using BuildingBlocks.Application;
 using BuildingBlocks.Infrastructure;
 using Delegation.Infrastructure;
+using Identity.Application.Services;
 using Identity.Infrastructure;
+using Identity.Infrastructure.Services;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
 using PermissionEngine.Infrastructure;
 using PolicyEngine.Infrastructure;
 using RbacCore.Infrastructure;
+using RbacSystem.Api.Infrastructure;
 using RbacSystem.Api.Middleware;
+using RbacSystem.Api.Seeding;
 using Serilog;
 using System.Text;
 using TenantManagement.Infrastructure;
@@ -67,6 +71,9 @@ builder.Services
     .AddDelegationModule(builder.Configuration)
     .AddAuditLoggingModule(builder.Configuration);
 
+builder.Services.AddScoped<IUserRoleProvider, UserRoleProvider>();
+
+
 // ── API ───────────────────────────────────────────────────────────────────────
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
@@ -81,6 +88,9 @@ builder.Services.AddSwaggerGen(c =>
         BearerFormat = "JWT"
     });
 });
+
+// ── Seed data (development only) ────────────────
+builder.Services.AddTransient<DataSeeder>();
 
 // ── Rate limiting ─────────────────────────────────────────────────────────────
 //builder.Services.AddRateLimiter(options =>
@@ -121,5 +131,7 @@ if (app.Environment.IsDevelopment())
 }
 
 app.MapControllers();
+
+await app.SeedDevelopmentDataAsync();
 
 app.Run();

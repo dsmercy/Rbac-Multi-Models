@@ -13,13 +13,17 @@ public sealed class UserRepository : IUserRepository
 
     public async Task<User?> GetByIdAsync(Guid userId, CancellationToken ct = default)
         => await _context.Users
-            .FirstOrDefaultAsync(u => u.Id == userId, ct);
+            .IgnoreQueryFilters()
+            .FirstOrDefaultAsync(u => !u.IsDeleted && u.Id == userId, ct);
 
-    public async Task<User?> GetByEmailAsync(string email, Guid tenantId, CancellationToken ct = default)
-        => await _context.Users
-            .FirstOrDefaultAsync(u =>
-                u.Email.Value == email.ToLowerInvariant() &&
-                u.TenantId == tenantId, ct);
+    public async Task<User?> GetByEmailAsync(
+    string email, Guid tenantId, CancellationToken ct = default)
+    => await _context.Users
+        .IgnoreQueryFilters()                          // bypass filter — no JWT yet
+        .FirstOrDefaultAsync(u =>
+            !u.IsDeleted &&
+            u.TenantId == tenantId &&
+            u.Email.Value == email.ToLowerInvariant(), ct);
 
     public async Task<bool> ExistsAsync(Guid userId, Guid tenantId, CancellationToken ct = default)
         => await _context.Users

@@ -12,6 +12,7 @@ public sealed class LoginCommandHandler : ICommandHandler<LoginCommand, TokenPai
     private readonly IRefreshTokenRepository _refreshTokenRepository;
     private readonly IPasswordHasher _passwordHasher;
     private readonly ITokenService _tokenService;
+    private readonly IUserRoleProvider _userRoleProvider;
     private readonly IPublisher _publisher;
 
     public LoginCommandHandler(
@@ -20,6 +21,7 @@ public sealed class LoginCommandHandler : ICommandHandler<LoginCommand, TokenPai
         IRefreshTokenRepository refreshTokenRepository,
         IPasswordHasher passwordHasher,
         ITokenService tokenService,
+        IUserRoleProvider userRoleProvider,
         IPublisher publisher)
     {
         _userRepository = userRepository;
@@ -27,6 +29,7 @@ public sealed class LoginCommandHandler : ICommandHandler<LoginCommand, TokenPai
         _refreshTokenRepository = refreshTokenRepository;
         _passwordHasher = passwordHasher;
         _tokenService = tokenService;
+        _userRoleProvider = userRoleProvider;
         _publisher = publisher;
     }
 
@@ -59,6 +62,10 @@ public sealed class LoginCommandHandler : ICommandHandler<LoginCommand, TokenPai
         credential.RecordSuccessfulLogin();
         user.RecordLogin();
 
+        // Bypasses EF query filters — no JWT exists during login
+        var roleNames = await _userRoleProvider.GetRoleNamesForLoginAsync(
+            user.Id, command.TenantId, cancellationToken);
+
         var rawRefreshToken = _tokenService.GenerateRawRefreshToken();
         var tokenHash = _tokenService.HashRefreshToken(rawRefreshToken);
 
@@ -72,10 +79,9 @@ public sealed class LoginCommandHandler : ICommandHandler<LoginCommand, TokenPai
         await _refreshTokenRepository.AddAsync(refreshToken, cancellationToken);
         await _userRepository.SaveChangesAsync(cancellationToken);
 
-        // Return raw token in the pair — client stores this, we only store the hash
         var tokenPair = _tokenService.GenerateTokenPair(
             Common.UserMapper.ToDto(user),
-            roles: []);
+            roles: roleNames);
 
         return tokenPair with { RefreshToken = rawRefreshToken };
     }

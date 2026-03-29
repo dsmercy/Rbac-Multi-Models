@@ -48,4 +48,18 @@ public sealed class UserRoleAssignmentRepository : IUserRoleAssignmentRepository
 
     public Task SaveChangesAsync(CancellationToken ct = default)
         => _context.SaveChangesAsync(ct);
+    public async Task<IReadOnlyList<UserRoleAssignment>> GetActiveByUserIgnoreFiltersAsync(
+    Guid userId, IEnumerable<Guid> tenantIds, CancellationToken ct = default)
+    {
+        var ids = tenantIds.ToList();
+        return await _context.UserRoleAssignments
+            .IgnoreQueryFilters()                          // no JWT during login
+            .Where(a =>
+                a.UserId == userId &&
+                ids.Contains(a.TenantId) &&
+                a.IsActive &&
+                (a.ExpiresAt == null || a.ExpiresAt > DateTimeOffset.UtcNow) &&
+                !a.IsDeleted)
+            .ToListAsync(ct);
+    }
 }

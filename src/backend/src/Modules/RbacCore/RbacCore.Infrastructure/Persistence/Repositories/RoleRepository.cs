@@ -15,6 +15,12 @@ public sealed class RoleRepository : IRoleRepository
             .Include(r => r.Permissions)
             .FirstOrDefaultAsync(r => r.Id == roleId, ct);
 
+    public Task<Role?> GetByIdIgnoreFiltersAsync(Guid roleId, CancellationToken ct = default)
+    => _context.Roles
+        .IgnoreQueryFilters()
+        .Include(r => r.Permissions)
+        .FirstOrDefaultAsync(r => r.Id == roleId && !r.IsDeleted, ct);
+
     public Task<Role?> GetByNameAsync(string name, Guid tenantId, CancellationToken ct = default)
         => _context.Roles
             .FirstOrDefaultAsync(r => r.Name == name && r.TenantId == tenantId, ct);
