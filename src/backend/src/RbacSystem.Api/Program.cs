@@ -107,14 +107,27 @@ builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(c =>
 {
-    c.SwaggerDoc("v1", new() { Title = "RBAC System API", Version = "v1" });
+    c.SwaggerDoc("v1", new()
+    {
+        Title       = "RBAC System API",
+        Version     = "v1",
+        Description = "Enterprise multi-tenant RBAC system with ABAC policy engine, " +
+                      "scoped hierarchy, time-bound delegation, and full audit trail."
+    });
+
+    // Include XML doc comments from the API project
+    var xmlFile = $"{System.Reflection.Assembly.GetExecutingAssembly().GetName().Name}.xml";
+    var xmlPath = System.IO.Path.Combine(AppContext.BaseDirectory, xmlFile);
+    c.IncludeXmlComments(xmlPath, includeControllerXmlComments: true);
+
     c.AddSecurityDefinition("Bearer", new Microsoft.OpenApi.Models.OpenApiSecurityScheme
     {
-        Name        = "Authorization",
-        Type        = Microsoft.OpenApi.Models.SecuritySchemeType.Http,
-        Scheme      = "bearer",
+        Name         = "Authorization",
+        Type         = Microsoft.OpenApi.Models.SecuritySchemeType.Http,
+        Scheme       = "bearer",
         BearerFormat = "JWT",
-        Description = "Enter the JWT token. The 'tv' claim is used for token-version validation."
+        Description  = "JWT access token. The `tv` (token version) claim is validated " +
+                       "against Redis on every permission-engine request to detect stale tokens."
     });
     c.AddSecurityRequirement(new Microsoft.OpenApi.Models.OpenApiSecurityRequirement
     {

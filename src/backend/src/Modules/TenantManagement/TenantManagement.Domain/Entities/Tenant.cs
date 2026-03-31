@@ -101,4 +101,7 @@ public sealed class Tenant : AuditableEntity
         Name = newName.Trim();
         SetUpdated(updatedByUserId);
     }
+
+    public void SoftDelete(Guid deletedByUserId)
+        => MarkDeleted(deletedByUserId);
 }

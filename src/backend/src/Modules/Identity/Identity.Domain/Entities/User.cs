@@ -86,6 +86,15 @@ public sealed class User : AuditableEntity
         AddDomainEvent(new UserReactivatedEvent(Id, TenantId));
     }
 
+    public void UpdateProfile(DisplayName newDisplayName, Guid updatedByUserId)
+    {
+        if (IsDeleted)
+            throw new DomainException("USER_DELETED", "Cannot update a deleted user.");
+
+        DisplayName = newDisplayName;
+        SetUpdated(updatedByUserId);
+    }
+
     public void RecordLogin()
     {
         LastLoginAt = DateTimeOffset.UtcNow;
