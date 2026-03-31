@@ -1,5 +1,5 @@
 using BuildingBlocks.Domain;
-using PolicyEngine.Domain.Events;
+using BuildingBlocks.Domain.Events;
 
 namespace PolicyEngine.Domain.Entities;
 
@@ -62,7 +62,7 @@ public sealed class Policy : AuditableEntity
         };
 
         policy.AddDomainEvent(new PolicyCreatedEvent(
-            policy.Id, tenantId, name, effect, createdByUserId));
+            policy.Id, tenantId, name, effect.ToString(), createdByUserId));
 
         return policy;
     }

@@ -1,6 +1,6 @@
 using System.ComponentModel.DataAnnotations.Schema;
 using BuildingBlocks.Domain;
-using Delegation.Domain.Events;
+using BuildingBlocks.Domain.Events;
 
 namespace Delegation.Domain.Entities;
 

@@ -1,5 +1,5 @@
 using AuditLogging.Application.Services;
-using Identity.Domain.Events;
+using BuildingBlocks.Domain.Events;
 using MediatR;
 
 namespace AuditLogging.Application.EventHandlers;

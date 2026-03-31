@@ -9,7 +9,7 @@ namespace RbacSystem.Api.Controllers;
 
 [ApiController]
 [Route("api/v1/tenants")]
-//[Authorize]
+[Authorize]
 public sealed class TenantsController : ControllerBase
 {
     private readonly ISender _sender;
@@ -72,7 +72,7 @@ public sealed class TenantsController : ControllerBase
 
     private Guid GetCallerId()
     {
-        var claim = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+        var claim = User.FindFirst("sub")?.Value;
         return Guid.TryParse(claim, out var id) ? id : Guid.Empty;
     }
 }

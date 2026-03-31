@@ -1,6 +1,6 @@
 using MediatR;
 using PermissionEngine.Domain.Interfaces;
-using RbacCore.Domain.Events;
+using BuildingBlocks.Domain.Events;
 
 namespace PermissionEngine.Application.EventHandlers;
 

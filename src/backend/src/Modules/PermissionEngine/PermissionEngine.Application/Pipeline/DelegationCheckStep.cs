@@ -1,8 +1,11 @@
+using Delegation.Application.Common;
 using Delegation.Application.Services;
 using PermissionEngine.Application.Pipeline;
+using PermissionEngine.Domain.Interfaces;
 using PermissionEngine.Domain.Models;
 using RbacCore.Application.Services;
 using System.Diagnostics;
+using System.Text.Json;
 using TenantManagement.Application.Services;
 
 namespace PermissionEngine.Application.Pipeline;
@@ -11,6 +14,11 @@ namespace PermissionEngine.Application.Pipeline;
 /// Step 3 — Delegation check.
 /// Validates: active delegation exists, delegator still holds the permission,
 /// delegation not revoked, chain depth within tenant limit.
+///
+/// Cache-aside for delegation:{tid}:{uid}  TTL 60s:
+///   • On hit:  deserialize and use cached ActiveDelegationDto.
+///   • On miss: query DB via IDelegationService, write result to cache.
+///   • Expired/invalid delegations are NOT cached — force re-evaluation next request.
 /// </summary>
 public sealed class DelegationCheckStep : IEvaluationStep
 {
@@ -19,24 +27,26 @@ public sealed class DelegationCheckStep : IEvaluationStep
     private readonly IDelegationService _delegationService;
     private readonly IRbacCoreService _rbacCoreService;
     private readonly ITenantService _tenantService;
+    private readonly IPermissionCacheService _cache;
 
     public DelegationCheckStep(
         IDelegationService delegationService,
         IRbacCoreService rbacCoreService,
-        ITenantService tenantService)
+        ITenantService tenantService,
+        IPermissionCacheService cache)
     {
         _delegationService = delegationService;
-        _rbacCoreService = rbacCoreService;
-        _tenantService = tenantService;
+        _rbacCoreService   = rbacCoreService;
+        _tenantService     = tenantService;
+        _cache             = cache;
     }
 
     public async Task<AccessResult?> EvaluateAsync(
         EvaluationRequest request,
         CancellationToken ct)
     {
-        var delegation = await _delegationService.GetActiveDelegationAsync(
-            request.UserId, request.Action, request.ScopeId,
-            request.Context.TenantId, ct);
+        var delegation = await GetDelegationAsync(request.UserId, request.Action,
+            request.ScopeId, request.Context.TenantId, ct);
 
         if (delegation is null)
             return null; // No delegation — continue pipeline
@@ -72,5 +82,31 @@ public sealed class DelegationCheckStep : IEvaluationStep
             delegation.ChainDepth);
 
         return null; // Continue pipeline
+    }
+
+    /// <summary>
+    /// Cache-aside for active delegations. Tries cache first; on miss queries DB and writes cache.
+    /// </summary>
+    private async Task<ActiveDelegationDto?> GetDelegationAsync(
+        Guid userId, string action, Guid scopeId, Guid tenantId, CancellationToken ct)
+    {
+        var json = await _cache.GetDelegationJsonAsync(userId, tenantId, ct);
+
+        if (json is not null)
+        {
+            var cached = JsonSerializer.Deserialize<ActiveDelegationDto>(json);
+            // Only use cached delegation if it covers the requested action
+            if (cached is not null && cached.PermissionCodes.Contains(action, StringComparer.OrdinalIgnoreCase))
+                return cached;
+        }
+
+        var delegation = await _delegationService.GetActiveDelegationAsync(
+            userId, action, scopeId, tenantId, ct);
+
+        if (delegation is not null)
+            await _cache.SetDelegationJsonAsync(userId, tenantId,
+                JsonSerializer.Serialize(delegation), ct);
+
+        return delegation;
     }
 }

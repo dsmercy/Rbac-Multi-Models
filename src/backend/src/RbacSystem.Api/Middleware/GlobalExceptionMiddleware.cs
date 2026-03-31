@@ -2,9 +2,13 @@ using BuildingBlocks.Application;
 using BuildingBlocks.Domain;
 using FluentValidation;
 using MediatR;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using PermissionEngine.Domain.Exceptions;
+using System.Data.Common;
 using System.Net;
+using System.Security.Cryptography;
+using System.Text;
 using System.Text.Json;
 
 namespace RbacSystem.Api.Middleware;
@@ -58,16 +62,32 @@ public sealed class GlobalExceptionMiddleware
     {
         var (statusCode, code, message) = MapException(exception);
 
-        // Log 401 events with IP + UA for security monitoring
+        // Log 401 events with IP + UA for security monitoring.
+        // For corrupt/malformed JWT: also log SHA256 hash of raw token (never the token itself).
         if (statusCode == HttpStatusCode.Unauthorized)
         {
-            _logger.LogWarning(
-                "Authentication failure [{Code}] for {Method} {Path} | IP={Ip} UA={UA}",
-                code,
-                context.Request.Method,
-                context.Request.Path,
-                context.Connection.RemoteIpAddress,
-                context.Request.Headers.UserAgent.ToString());
+            if (exception is SecurityTokenException)
+            {
+                var tokenHash = HashBearerToken(context.Request.Headers.Authorization.ToString());
+                _logger.LogWarning(
+                    "Invalid token [{Code}] for {Method} {Path} | IP={Ip} UA={UA} TokenHash={TokenHash}",
+                    code,
+                    context.Request.Method,
+                    context.Request.Path,
+                    context.Connection.RemoteIpAddress,
+                    context.Request.Headers.UserAgent.ToString(),
+                    tokenHash);
+            }
+            else
+            {
+                _logger.LogWarning(
+                    "Authentication failure [{Code}] for {Method} {Path} | IP={Ip} UA={UA}",
+                    code,
+                    context.Request.Method,
+                    context.Request.Path,
+                    context.Connection.RemoteIpAddress,
+                    context.Request.Headers.UserAgent.ToString());
+            }
         }
         else if (statusCode == HttpStatusCode.InternalServerError)
         {
@@ -133,6 +153,13 @@ public sealed class GlobalExceptionMiddleware
             "TOKEN_INVALID",
             "The provided token is invalid or malformed. Please re-authenticate."),
 
+        // Authentication failure (wrong password, unknown user, account locked).
+        // Distinct from UnauthorizedAccessException which is authorization (403).
+        InvalidCredentialsException => (
+            HttpStatusCode.Unauthorized,
+            "INVALID_CREDENTIALS",
+            "Invalid email or password."),
+
         // ── 403 Forbidden ─────────────────────────────────────────────────────
         UnauthorizedAccessException => (
             HttpStatusCode.Forbidden,
@@ -152,9 +179,22 @@ public sealed class GlobalExceptionMiddleware
             de.Message),
 
         // ── 503 Service Unavailable ───────────────────────────────────────────
-        // Distinguish infrastructure failure from permission denial (spec requirement:
-        // "DB unavailable → 503, not 403 — caller must distinguish infra from denial")
+        // Spec: "DB unavailable → 503, not 403 — caller must distinguish infra failure from denial"
         DbUnavailableException => (
+            HttpStatusCode.ServiceUnavailable,
+            "SERVICE_UNAVAILABLE",
+            "A required service is temporarily unavailable. Please retry."),
+
+        // Raw DB exceptions (NpgsqlException, SqlException) that bubble up without being
+        // wrapped in DbUnavailableException — e.g. connection refused at startup.
+        // DbException is the BCL base for all ADO.NET provider exceptions.
+        DbException => (
+            HttpStatusCode.ServiceUnavailable,
+            "SERVICE_UNAVAILABLE",
+            "A required service is temporarily unavailable. Please retry."),
+
+        // EF Core wraps connection failures in DbUpdateException
+        DbUpdateException => (
             HttpStatusCode.ServiceUnavailable,
             "SERVICE_UNAVAILABLE",
             "A required service is temporarily unavailable. Please retry."),
@@ -170,6 +210,28 @@ public sealed class GlobalExceptionMiddleware
             "INTERNAL_ERROR",
             "An unexpected error occurred.")
     };
+
+    /// <summary>
+    /// Computes SHA256 of the raw bearer token for security logging.
+    /// Extracts "Bearer &lt;token&gt;" from the Authorization header value.
+    /// Never logs the raw token — only its hash (OWASP A09).
+    /// Returns "none" when no bearer token is present.
+    /// </summary>
+    private static string HashBearerToken(string authorizationHeader)
+    {
+        if (string.IsNullOrWhiteSpace(authorizationHeader))
+            return "none";
+
+        var rawToken = authorizationHeader.StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase)
+            ? authorizationHeader["Bearer ".Length..]
+            : authorizationHeader;
+
+        if (string.IsNullOrWhiteSpace(rawToken))
+            return "none";
+
+        var bytes = SHA256.HashData(Encoding.UTF8.GetBytes(rawToken));
+        return Convert.ToHexString(bytes).ToLowerInvariant();
+    }
 
     /// <summary>
     /// Publishes <see cref="StaleTokenDetectedNotification"/> so Identity module can

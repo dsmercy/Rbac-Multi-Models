@@ -1,4 +1,5 @@
 using BuildingBlocks.Application;
+using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using PermissionEngine.Application.Pipeline;
@@ -15,6 +16,22 @@ public static class PermissionEngineModuleExtensions
         this IServiceCollection services,
         IConfiguration configuration)
     {
+        // ── Options ───────────────────────────────────────────────────────────
+        // PermissionCacheOptions (Infrastructure) — Redis-specific config (fail-closed, stampede lock)
+        services.Configure<PermissionCacheOptions>(
+            configuration.GetSection(PermissionCacheOptions.SectionName));
+
+        // EvaluationOptions (Application) — eval timeout used by the service
+        services.Configure<PermissionEngine.Application.EvaluationOptions>(
+            configuration.GetSection(PermissionEngine.Application.EvaluationOptions.SectionName));
+
+        // ── L1 in-process memory cache ────────────────────────────────────────
+        // IMemoryCache is a singleton; L1PermissionCache wraps it with per-tenant
+        // CancellationTokenSource invalidation, also singleton.
+        services.AddMemoryCache();
+        services.AddSingleton<L1PermissionCache>(
+            sp => new L1PermissionCache(sp.GetRequiredService<IMemoryCache>()));
+
         // ── Redis ─────────────────────────────────────────────────────────────
         var redisConnection = configuration.GetConnectionString("Redis")
             ?? throw new InvalidOperationException("Redis connection string is required.");
@@ -22,8 +39,11 @@ public static class PermissionEngineModuleExtensions
         services.AddSingleton<IConnectionMultiplexer>(
             ConnectionMultiplexer.Connect(redisConnection));
 
+        // Subscribe to cache-invalidation:* pub/sub to bust L1 on domain events.
+        services.AddHostedService<CacheInvalidationSubscriberService>();
+
         // Register RedisPermissionCacheService as both its cache interface
-        // and the BuildingBlocks ITokenVersionService interface, so:
+        // and the BuildingBlocks ITokenVersionService, so:
         //   • PermissionEngine pipeline steps get IPermissionCacheService
         //   • Identity.Application LoginCommandHandler gets ITokenVersionService
         // Both resolve to the same scoped instance within a single request.
@@ -35,10 +55,10 @@ public static class PermissionEngineModuleExtensions
         services.AddScoped<ITokenVersionService>(
             sp => sp.GetRequiredService<RedisPermissionCacheService>());
 
-        // ── MediatR — register token-version event handlers ───────────────────
-        // These handlers (UserRoleAssigned, UserRoleRevoked, DelegationCreated,
-        // DelegationRevoked) increment the user's token version in Redis so that
-        // stale JWTs are rejected on the next permission evaluation.
+        // ── MediatR — register all PermissionEngine event handlers ───────────
+        // Handlers registered:
+        //   Token-version:  UserRoleAssigned, UserRoleRevoked, DelegationCreated, DelegationRevoked
+        //   Cache eviction: PolicyCreated, PolicyUpdated, PolicyDeleted, TenantSuspended
         services.AddMediatR(cfg =>
             cfg.RegisterServicesFromAssembly(
                 typeof(PermissionEngine.Application.EventHandlers.UserRoleAssignedTokenVersionHandler).Assembly));

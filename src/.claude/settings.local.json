@@ -7,7 +7,32 @@
       "Bash(find /c/Daya/DotNet/\"AI Projects\"/RBAC-multi-models/src/backend/src -name \"*Utility\\\\|*Helper\\\\|*Utils\\\\|*Extensions\" -type f)",
       "Bash(docker ps:*)",
       "Bash(docker info:*)",
-      "Bash(docker compose:*)"
+      "Bash(docker compose:*)",
+      "Bash(xargs grep:*)",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" http://localhost:5000/api/v1/tenants/1c0479df-6ba1-4fa7-95e1-2dd1a3305694)",
+      "Bash(BASE=\"http://localhost:5000\" TENANT=\"1c0479df-6ba1-4fa7-95e1-2dd1a3305694\" __NEW_LINE_27e6e4121dbbf2db__ echo \"=== [1] GET /tenants/{tid} — no auth ===\" curl -s \"$BASE/api/v1/tenants/$TENANT\")",
+      "Bash(BASE=\"http://localhost:5000\")",
+      "Bash(TENANT=\"1c0479df-6ba1-4fa7-95e1-2dd1a3305694\")",
+      "Bash(__NEW_LINE_7a2fce9ee81d88e8__ echo:*)",
+      "Bash(curl -s \"$BASE/api/v1/tenants/$TENANT\")",
+      "Bash(cmd /c \"taskkill /PID 10404 /F\")",
+      "Bash(cmd //c \"taskkill /F /IM dotnet.exe\")",
+      "Bash(curl -s http://localhost:5000/health)",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" http://localhost:5000/health)",
+      "Bash(curl -s http://localhost:5000/api/v1/tenants/1c0479df-6ba1-4fa7-95e1-2dd1a3305694)",
+      "Bash(PGPASSWORD=root \"/c/Program Files/PostgreSQL/18/bin/psql\" -h localhost -U postgres -d rbac_multi_model -c \"SELECT \"\"Code\"\", \"\"TenantId\"\", \"\"IsDeleted\"\" FROM rbac.\"\"Permissions\"\" WHERE \"\"Code\"\" LIKE ''users%'' LIMIT 10;\")",
+      "Bash(head -20 grep -n \"Route\\\\|HttpGet\\\\|HttpPost\\\\|HttpPut\\\\|HttpDelete\\\\|CreateDelegation\" 'c:\\\\Daya\\\\DotNet\\\\AI Projects\\\\RBAC-multi-models\\\\src\\\\backend\\\\src\\\\RbacSystem.Api\\\\Controllers\\\\DelegationsController.cs')",
+      "Bash(for f:*)",
+      "Bash(do)",
+      "Bash(sed -i 's/User\\\\.FindFirst\\(System\\\\.Security\\\\.Claims\\\\.ClaimTypes\\\\.NameIdentifier\\)/User.FindFirst\\(\"\"sub\"\"\\)/g' \"$f\")",
+      "Bash(sed -i 's/User\\\\.FindFirst\\(ClaimTypes\\\\.NameIdentifier\\)/User.FindFirst\\(\"\"sub\"\"\\)/g' \"$f\")",
+      "Bash(echo \"Fixed: $f\")",
+      "Bash(PGPASSWORD=root \"/c/Program Files/PostgreSQL/18/bin/psql\" -h localhost -U postgres -d rbac_multi_model -c \"SELECT p.\"\"Code\"\" FROM rbac.\"\"RolePermissions\"\" rp JOIN rbac.\"\"Permissions\"\" p ON rp.\"\"PermissionId\"\" = p.\"\"Id\"\" WHERE rp.\"\"RoleId\"\" = ''feeaa4e6-1be0-490b-835f-406560e895d7'' LIMIT 10;\")",
+      "Bash(PGPASSWORD=root \"/c/Program Files/PostgreSQL/18/bin/psql\" -h localhost -U postgres -d rbac_multi_model -c \"SELECT \"\"UserId\"\", \"\"RoleId\"\", \"\"ScopeId\"\", \"\"IsActive\"\" FROM rbac.\"\"UserRoleAssignments\"\" WHERE \"\"UserId\"\" = ''61f393b1-e0fb-4993-b833-18695949e04b'' LIMIT 5;\")",
+      "Bash(PGPASSWORD=root \"/c/Program Files/PostgreSQL/18/bin/psql\" -h localhost -U postgres -d rbac_multi_model -c \"SELECT \"\"Id\"\", \"\"DelegatorId\"\", \"\"DelegateeId\"\", \"\"ScopeId\"\", \"\"Status\"\", \"\"PermissionIds\"\" FROM delegation.\"\"Delegations\"\" LIMIT 5;\")",
+      "Bash(PGPASSWORD=root \"/c/Program Files/PostgreSQL/18/bin/psql\" -h localhost -U postgres -d rbac_multi_model -c \"\\\\d delegation.\"\"Delegations\"\"\")",
+      "Bash(PGPASSWORD=root \"/c/Program Files/PostgreSQL/18/bin/psql\" -h localhost -U postgres -d rbac_multi_model -c \"SELECT \"\"Id\"\", \"\"DelegatorId\"\", \"\"DelegateeId\"\", \"\"ScopeId\"\", \"\"IsRevoked\"\", permission_codes FROM delegation.\"\"Delegations\"\" LIMIT 5;\")",
+      "Bash(PGPASSWORD=root \"/c/Program Files/PostgreSQL/18/bin/psql\" -h localhost -U postgres -d rbac_multi_model -c \"SELECT p.\"\"Code\"\" FROM rbac.\"\"RolePermissions\"\" rp JOIN rbac.\"\"Permissions\"\" p ON rp.\"\"PermissionId\"\" = p.\"\"Id\"\" WHERE rp.\"\"RoleId\"\" = ''feeaa4e6-1be0-490b-835f-406560e895d7'' ORDER BY p.\"\"Code\"\";\")"
     ]
   }
 }

@@ -1,6 +1,6 @@
 using AuditLogging.Application.Services;
 using MediatR;
-using RbacCore.Domain.Events;
+using BuildingBlocks.Domain.Events;
 
 namespace AuditLogging.Application.EventHandlers;
 

@@ -25,7 +25,7 @@ public sealed class RolesController : ControllerBase
         var result = await _sender.Send(
             new CreateRoleCommand(tid, request.Name, request.Description, GetCallerId()), ct);
 
-        return CreatedAtAction(nameof(GetUserRoles), new { tid }, result);
+        return Created($"api/v1/tenants/{tid}/roles/{result.Id}", result);
     }
 
     [HttpDelete("{roleId:guid}")]
@@ -90,7 +90,7 @@ public sealed class RolesController : ControllerBase
 
     private Guid GetCallerId()
     {
-        var claim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+        var claim = User.FindFirst("sub")?.Value;
         return Guid.TryParse(claim, out var id) ? id : Guid.Empty;
     }
 }

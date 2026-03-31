@@ -1,6 +1,6 @@
 using AuditLogging.Application.Services;
 using MediatR;
-using TenantManagement.Domain.Events;
+using BuildingBlocks.Domain.Events;
 
 namespace AuditLogging.Application.EventHandlers;
 

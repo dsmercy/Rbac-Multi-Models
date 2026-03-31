@@ -1,4 +1,5 @@
 using BuildingBlocks.Domain;
+using BuildingBlocks.Domain.Events;
 using TenantManagement.Domain.Events;
 using TenantManagement.Domain.ValueObjects;
 

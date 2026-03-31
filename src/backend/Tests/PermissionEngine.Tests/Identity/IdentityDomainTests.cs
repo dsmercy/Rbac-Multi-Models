@@ -5,6 +5,7 @@
 using BuildingBlocks.Domain;
 using FluentAssertions;
 using Identity.Domain.Entities;
+using BuildingBlocks.Domain.Events;
 using Identity.Domain.Events;
 using Identity.Domain.ValueObjects;
 using Xunit;

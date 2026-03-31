@@ -5,7 +5,7 @@
 using BuildingBlocks.Domain;
 using FluentAssertions;
 using RbacCore.Domain.Entities;
-using RbacCore.Domain.Events;
+using BuildingBlocks.Domain.Events;
 using Xunit;
 
 namespace PermissionEngine.Tests.Domain;

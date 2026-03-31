@@ -28,8 +28,8 @@ public sealed class AuditLogsController : ControllerBase
         CancellationToken ct = default)
     {
         pageSize = Math.Min(pageSize, 200);
-        var fromDate = from ?? DateTimeOffset.UtcNow.AddDays(-7);
-        var toDate = to ?? DateTimeOffset.UtcNow;
+        var fromDate = (from ?? DateTimeOffset.UtcNow.AddDays(-7)).ToUniversalTime();
+        var toDate = (to ?? DateTimeOffset.UtcNow).ToUniversalTime();
 
         var logs = await _auditLogRepository.QueryAsync(
             tid, fromDate, toDate, userId, action, resourceId, page, pageSize, ct);

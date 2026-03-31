@@ -1,9 +1,8 @@
 using FluentAssertions;
 using NSubstitute;
-using Delegation.Domain.Events;
+using BuildingBlocks.Domain.Events;
 using PermissionEngine.Application.EventHandlers;
 using PermissionEngine.Domain.Interfaces;
-using RbacCore.Domain.Events;
 using Xunit;
 
 namespace PermissionEngine.Tests.Pipeline;

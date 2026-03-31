@@ -1,4 +1,5 @@
 using BuildingBlocks.Application;
+using BuildingBlocks.Domain;
 using Identity.Application.Services;
 using Identity.Domain.Interfaces;
 using MediatR;
@@ -54,25 +55,25 @@ public sealed class LoginCommandHandler : ICommandHandler<LoginCommand, TokenPai
         // ── 1. User lookup ────────────────────────────────────────────────────
         var user = await _userRepository.GetByEmailAsync(
             command.Email, command.TenantId, cancellationToken)
-            ?? throw new UnauthorizedAccessException("Invalid credentials.");
+            ?? throw new InvalidCredentialsException("Invalid credentials.");
 
         if (!user.IsActive)
-            throw new UnauthorizedAccessException("User account is inactive.");
+            throw new InvalidCredentialsException("User account is inactive.");
 
         // ── 2. Credential validation ──────────────────────────────────────────
         var credential = await _credentialRepository.GetByUserIdAsync(
             user.Id, cancellationToken)
-            ?? throw new UnauthorizedAccessException("Invalid credentials.");
+            ?? throw new InvalidCredentialsException("Invalid credentials.");
 
         if (credential.IsLockedOut())
-            throw new UnauthorizedAccessException(
+            throw new InvalidCredentialsException(
                 "Account is temporarily locked due to too many failed attempts.");
 
         if (!_passwordHasher.Verify(command.Password, credential.PasswordHash, credential.PasswordSalt))
         {
             credential.RecordFailedAttempt();
             await _credentialRepository.SaveChangesAsync(cancellationToken);
-            throw new UnauthorizedAccessException("Invalid credentials.");
+            throw new InvalidCredentialsException("Invalid credentials.");
         }
 
         credential.RecordSuccessfulLogin();

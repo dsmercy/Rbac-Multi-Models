@@ -32,7 +32,7 @@ public sealed class PoliciesController : ControllerBase
             request.Action,
             GetCallerId()), ct);
 
-        return CreatedAtAction(nameof(CreatePolicy), new { tid, policyId = id }, new { id });
+        return Created($"api/v1/tenants/{tid}/policies/{id}", new { id });
     }
 
     [HttpDelete("{policyId:guid}")]
@@ -45,7 +45,7 @@ public sealed class PoliciesController : ControllerBase
 
     private Guid GetCallerId()
     {
-        var claim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+        var claim = User.FindFirst("sub")?.Value;
         return Guid.TryParse(claim, out var id) ? id : Guid.Empty;
     }
 }

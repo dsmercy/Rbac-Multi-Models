@@ -1,4 +1,7 @@
 using FluentAssertions;
+using Microsoft.Extensions.Caching.Memory;
+using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Options;
 using NSubstitute;
 using PermissionEngine.Domain.Models;
 using PermissionEngine.Infrastructure.Cache;
@@ -28,7 +31,12 @@ public sealed class RedisTokenVersionTests
     private RedisPermissionCacheService CreateSut()
     {
         _redis.GetDatabase().Returns(_db);
-        return new RedisPermissionCacheService(_redis);
+        var l1 = new L1PermissionCache(new MemoryCache(Options.Create(new MemoryCacheOptions())));
+        return new RedisPermissionCacheService(
+            _redis,
+            Options.Create(new PermissionCacheOptions()),
+            NullLogger<RedisPermissionCacheService>.Instance,
+            l1);
     }
 
     // RTV-01 ──────────────────────────────────────────────────────────────────

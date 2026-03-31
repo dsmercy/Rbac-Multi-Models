@@ -1,0 +1,853 @@
+{
+  "info": {
+    "name": "RBAC Multi-Model System",
+    "description": "Enterprise RBAC — pre-filled with real seeded DB values.\n\n**Key facts (from testing session):**\n- All endpoints require Bearer auth except POST /auth/login and POST /auth/refresh\n- Login body must include tenantId\n- JWT claims keep JWT names (sub, tid, tv) — no ClaimTypes remapping\n- PolicyEffect: 1=Allow, 2=Deny (integer in JSON)\n- ConditionTreeJson: serialised JSON string\n- Delegator (delegator@acme.test) has content-editor role in ALPHA scope only — delegation uses scopeId_alpha\n- Audit log from/to must be UTC ISO-8601 (e.g. 2026-01-01T00:00:00Z)\n- Super-admin bypasses tenant isolation middleware\n\n**Run order:** Login → Refresh → Roles → Policies → Delegations → Permission Checks → Audit Logs",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+
+  "variable": [
+    { "key": "baseUrl",           "value": "http://localhost:5000",                            "type": "string" },
+    { "key": "tenantId",          "value": "1c0479df-6ba1-4fa7-95e1-2dd1a3305694",             "type": "string" },
+
+    { "key": "adminEmail",        "value": "admin@acme.test",                                  "type": "string" },
+    { "key": "adminPassword",     "value": "Seed@Test123!",                                    "type": "string" },
+    { "key": "viewerEmail",       "value": "viewer@acme.test",                                 "type": "string" },
+    { "key": "viewerPassword",    "value": "Seed@Test123!",                                    "type": "string" },
+    { "key": "delegatorEmail",    "value": "delegator@acme.test",                              "type": "string" },
+    { "key": "delegatorPassword", "value": "Seed@Test123!",                                    "type": "string" },
+
+    { "key": "accessToken",       "value": "",                                                 "type": "string" },
+    { "key": "refreshToken",      "value": "",                                                 "type": "string" },
+    { "key": "viewerToken",       "value": "",                                                 "type": "string" },
+    { "key": "delegatorToken",    "value": "",                                                 "type": "string" },
+
+    { "key": "userId",            "value": "f78523e5-4d7c-496c-8a27-e9626bd1a2ad",            "type": "string" },
+    { "key": "viewerUserId",      "value": "0bf5c4e5-721a-466b-a52d-b23eb91be22c",            "type": "string" },
+    { "key": "editorUserId",      "value": "654254b3-3d45-427a-a012-840ac0647e60",            "type": "string" },
+    { "key": "delegatorUserId",   "value": "61f393b1-e0fb-4993-b833-18695949e04b",            "type": "string" },
+    { "key": "delegateeUserId",   "value": "21c125ec-5201-4827-9c34-0f179820375b",            "type": "string" },
+
+    { "key": "roleId_admin",      "value": "f8fccfe5-2689-4684-8a05-5897ec8a5446",            "type": "string" },
+    { "key": "roleId_editor",     "value": "feeaa4e6-1be0-490b-835f-406560e895d7",            "type": "string" },
+    { "key": "roleId_viewer",     "value": "923a426f-41e2-493d-81c1-a702b4bad164",            "type": "string" },
+    { "key": "roleId",            "value": "",                                                 "type": "string" },
+
+    { "key": "scopeId_org",       "value": "bd9cbe33-e2e3-40d2-b393-64ab6701bfe4",            "type": "string" },
+    { "key": "scopeId_engineering","value": "df61dee4-a5fe-443b-af6b-41df158f9031",           "type": "string" },
+    { "key": "scopeId_marketing", "value": "15b854bb-2cb5-4159-b034-2c9c779265df",            "type": "string" },
+    { "key": "scopeId_alpha",     "value": "3b6400b2-6d03-49a9-9829-5aeb3d2caa9d",            "type": "string" },
+    { "key": "scopeId_beta",      "value": "3eeca8e4-d210-4b96-b878-3cfb0eca568c",            "type": "string" },
+
+    { "key": "policyId",          "value": "",                                                 "type": "string" },
+    { "key": "delegationId",      "value": "",                                                 "type": "string" },
+    { "key": "resourceId",        "value": "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee",            "type": "string" }
+  ],
+
+  "item": [
+
+    {
+      "name": "1. Authentication",
+      "item": [
+
+        {
+          "name": "Login (admin)",
+          "event": [{
+            "listen": "test",
+            "script": {
+              "exec": [
+                "pm.test('Status 200', () => pm.expect(pm.response.code).to.equal(200));",
+                "if (pm.response.code !== 200) return;",
+                "const body = pm.response.json();",
+                "pm.collectionVariables.set('accessToken',  body.accessToken);",
+                "pm.collectionVariables.set('refreshToken', body.refreshToken);",
+                "try {",
+                "    const p = JSON.parse(atob(body.accessToken.split('.')[1].replace(/-/g,'+').replace(/_/g,'/')));",
+                "    if (p.sub) pm.collectionVariables.set('userId', p.sub);",
+                "    pm.test('userId extracted: ' + p.sub, () => pm.expect(p.sub).to.be.a('string'));",
+                "    pm.test('tid claim matches tenantId', () => pm.expect(p.tid).to.equal(pm.collectionVariables.get('tenantId')));",
+                "    pm.test('tv (token version) is number', () => pm.expect(typeof p.tv).to.not.equal('undefined'));",
+                "    console.log('sub (userId):', p.sub, '| tv:', p.tv, '| is_super_admin:', p.is_super_admin);",
+                "} catch(e) { console.error('JWT decode error:', e); }"
+              ],
+              "type": "text/javascript"
+            }
+          }],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"tenantId\": \"{{tenantId}}\",\n  \"email\": \"{{adminEmail}}\",\n  \"password\": \"{{adminPassword}}\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/api/v1/auth/login", "host": ["{{baseUrl}}"], "path": ["api","v1","auth","login"] }
+          }
+        },
+
+        {
+          "name": "Login (viewer) — saves viewerToken",
+          "event": [{
+            "listen": "test",
+            "script": {
+              "exec": [
+                "pm.test('Status 200', () => pm.expect(pm.response.code).to.equal(200));",
+                "if (pm.response.code !== 200) return;",
+                "pm.collectionVariables.set('viewerToken', pm.response.json().accessToken);",
+                "console.log('viewerToken saved');"
+              ],
+              "type": "text/javascript"
+            }
+          }],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"tenantId\": \"{{tenantId}}\",\n  \"email\": \"{{viewerEmail}}\",\n  \"password\": \"{{viewerPassword}}\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/api/v1/auth/login", "host": ["{{baseUrl}}"], "path": ["api","v1","auth","login"] }
+          }
+        },
+
+        {
+          "name": "Login (delegator) — saves delegatorToken",
+          "event": [{
+            "listen": "test",
+            "script": {
+              "exec": [
+                "pm.test('Status 200', () => pm.expect(pm.response.code).to.equal(200));",
+                "if (pm.response.code !== 200) return;",
+                "pm.collectionVariables.set('delegatorToken', pm.response.json().accessToken);",
+                "console.log('delegatorToken saved');"
+              ],
+              "type": "text/javascript"
+            }
+          }],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"tenantId\": \"{{tenantId}}\",\n  \"email\": \"{{delegatorEmail}}\",\n  \"password\": \"{{delegatorPassword}}\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/api/v1/auth/login", "host": ["{{baseUrl}}"], "path": ["api","v1","auth","login"] }
+          }
+        },
+
+        {
+          "name": "Refresh Token",
+          "event": [{
+            "listen": "test",
+            "script": {
+              "exec": [
+                "pm.test('Status 200', () => pm.expect(pm.response.code).to.equal(200));",
+                "if (pm.response.code !== 200) return;",
+                "const body = pm.response.json();",
+                "pm.collectionVariables.set('accessToken',  body.accessToken);",
+                "pm.collectionVariables.set('refreshToken', body.refreshToken);",
+                "try {",
+                "    const p = JSON.parse(atob(body.accessToken.split('.')[1].replace(/-/g,'+').replace(/_/g,'/')));",
+                "    if (p.sub) pm.collectionVariables.set('userId', p.sub);",
+                "    pm.test('New token version tv: ' + p.tv, () => pm.expect(p.tv).to.not.be.undefined);",
+                "} catch(e) {}"
+              ],
+              "type": "text/javascript"
+            }
+          }],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"refreshToken\": \"{{refreshToken}}\",\n  \"tenantId\": \"{{tenantId}}\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/api/v1/auth/refresh", "host": ["{{baseUrl}}"], "path": ["api","v1","auth","refresh"] }
+          }
+        },
+
+        {
+          "name": "Login — Wrong Password (expect 401)",
+          "event": [{
+            "listen": "test",
+            "script": {
+              "exec": [
+                "pm.test('Wrong password → 401', () => pm.expect(pm.response.code).to.equal(401));",
+                "pm.test('Code is INVALID_CREDENTIALS', () => pm.expect(pm.response.json().code).to.equal('INVALID_CREDENTIALS'));"
+              ],
+              "type": "text/javascript"
+            }
+          }],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"tenantId\": \"{{tenantId}}\",\n  \"email\": \"{{adminEmail}}\",\n  \"password\": \"wrong-password\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/api/v1/auth/login", "host": ["{{baseUrl}}"], "path": ["api","v1","auth","login"] }
+          }
+        },
+
+        {
+          "name": "Corrupt JWT (expect 401)",
+          "description": "GlobalExceptionMiddleware catches SecurityTokenException and returns 401. Raw token is never echoed — only its SHA-256 hash is logged server-side.",
+          "event": [{
+            "listen": "test",
+            "script": {
+              "exec": [
+                "pm.test('Corrupt JWT → 401', () => pm.expect(pm.response.code).to.equal(401));",
+                "pm.test('Response body does not echo raw token', () => pm.expect(pm.response.text()).to.not.include('eyJ'));"
+              ],
+              "type": "text/javascript"
+            }
+          }],
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer thisis.not.a.valid.jwt.atall" }],
+            "url": { "raw": "{{baseUrl}}/api/v1/tenants/{{tenantId}}", "host": ["{{baseUrl}}"], "path": ["api","v1","tenants","{{tenantId}}"] }
+          }
+        }
+
+      ]
+    },
+
+    {
+      "name": "2. Tenant",
+      "item": [
+
+        {
+          "name": "Get Tenant (with auth) — expect 200",
+          "description": "GetTenant is under class-level [Authorize]. Requires Bearer token.",
+          "event": [{
+            "listen": "test",
+            "script": {
+              "exec": [
+                "pm.test('Status 200', () => pm.expect(pm.response.code).to.equal(200));",
+                "const b = pm.response.json();",
+                "pm.test('id matches tenantId', () => pm.expect(b.id).to.equal(pm.collectionVariables.get('tenantId')));",
+                "pm.test('slug is acme-test',   () => pm.expect(b.slug).to.equal('acme-test'));"
+              ],
+              "type": "text/javascript"
+            }
+          }],
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{accessToken}}", "type": "string" }] },
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/api/v1/tenants/{{tenantId}}", "host": ["{{baseUrl}}"], "path": ["api","v1","tenants","{{tenantId}}"] }
+          }
+        },
+
+        {
+          "name": "No Auth → 401",
+          "event": [{
+            "listen": "test",
+            "script": {
+              "exec": ["pm.test('No auth → 401', () => pm.expect(pm.response.code).to.equal(401));"],
+              "type": "text/javascript"
+            }
+          }],
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/api/v1/tenants/{{tenantId}}", "host": ["{{baseUrl}}"], "path": ["api","v1","tenants","{{tenantId}}"] }
+          }
+        },
+
+        {
+          "name": "Cross-Tenant — non-admin viewer (expect 403 TENANT_MISMATCH)",
+          "description": "viewerToken has tid=real tenantId. Route uses ffffffff-... → TenantValidationMiddleware returns 403. (Super-admin bypasses this check.)",
+          "event": [{
+            "listen": "test",
+            "script": {
+              "exec": [
+                "pm.test('Cross-tenant → 403', () => pm.expect(pm.response.code).to.equal(403));",
+                "pm.test('Code TENANT_MISMATCH', () => pm.expect(pm.response.json().code).to.equal('TENANT_MISMATCH'));"
+              ],
+              "type": "text/javascript"
+            }
+          }],
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{viewerToken}}", "type": "string" }] },
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/api/v1/tenants/ffffffff-ffff-ffff-ffff-ffffffffffff", "host": ["{{baseUrl}}"], "path": ["api","v1","tenants","ffffffff-ffff-ffff-ffff-ffffffffffff"] }
+          }
+        }
+
+      ]
+    },
+
+    {
+      "name": "3. Roles",
+      "item": [
+
+        {
+          "name": "Create Role",
+          "description": "Creates a test role and stores its id in {{roleId}} for subsequent requests.",
+          "event": [{
+            "listen": "test",
+            "script": {
+              "exec": [
+                "pm.test('Status 201', () => pm.expect(pm.response.code).to.equal(201));",
+                "if (pm.response.code !== 201) return;",
+                "const id = pm.response.json().id;",
+                "pm.collectionVariables.set('roleId', id);",
+                "pm.test('roleId saved: ' + id, () => pm.expect(id).to.be.a('string'));"
+              ],
+              "type": "text/javascript"
+            }
+          }],
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{accessToken}}", "type": "string" }] },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"postman-test-role\",\n  \"description\": \"Created by Postman for testing\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/api/v1/tenants/{{tenantId}}/roles", "host": ["{{baseUrl}}"], "path": ["api","v1","tenants","{{tenantId}}","roles"] }
+          }
+        },
+
+        {
+          "name": "List User Roles (admin)",
+          "event": [{
+            "listen": "test",
+            "script": {
+              "exec": ["pm.test('Status 200', () => pm.expect(pm.response.code).to.equal(200));"],
+              "type": "text/javascript"
+            }
+          }],
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{accessToken}}", "type": "string" }] },
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/tenants/{{tenantId}}/roles/users/{{userId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api","v1","tenants","{{tenantId}}","roles","users","{{userId}}"]
+            }
+          }
+        },
+
+        {
+          "name": "Grant Permission to Role (users:read)",
+          "description": "POST /roles/{roleId}/permissions/{permissionCode}. The permission code is the action string — must exist in the Permissions table for this tenant.",
+          "event": [{
+            "listen": "test",
+            "script": {
+              "exec": ["pm.test('Status 204', () => pm.expect(pm.response.code).to.equal(204));"],
+              "type": "text/javascript"
+            }
+          }],
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{accessToken}}", "type": "string" }] },
+            "method": "POST",
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/tenants/{{tenantId}}/roles/{{roleId}}/permissions/users:read",
+              "host": ["{{baseUrl}}"],
+              "path": ["api","v1","tenants","{{tenantId}}","roles","{{roleId}}","permissions","users:read"]
+            }
+          }
+        },
+
+        {
+          "name": "Revoke Permission from Role (users:read)",
+          "event": [{
+            "listen": "test",
+            "script": {
+              "exec": ["pm.test('Status 204', () => pm.expect(pm.response.code).to.equal(204));"],
+              "type": "text/javascript"
+            }
+          }],
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{accessToken}}", "type": "string" }] },
+            "method": "DELETE",
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/tenants/{{tenantId}}/roles/{{roleId}}/permissions/users:read",
+              "host": ["{{baseUrl}}"],
+              "path": ["api","v1","tenants","{{tenantId}}","roles","{{roleId}}","permissions","users:read"]
+            }
+          }
+        },
+
+        {
+          "name": "Assign Role to User (viewer at org scope)",
+          "description": "POST /roles/users/{userId}/assign/{roleId} with optional scopeId and expiresAt in the body.",
+          "event": [{
+            "listen": "test",
+            "script": {
+              "exec": ["pm.test('Status 204', () => pm.expect(pm.response.code).to.equal(204));"],
+              "type": "text/javascript"
+            }
+          }],
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{accessToken}}", "type": "string" }] },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"scopeId\": \"{{scopeId_org}}\",\n  \"expiresAt\": null\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/tenants/{{tenantId}}/roles/users/{{viewerUserId}}/assign/{{roleId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api","v1","tenants","{{tenantId}}","roles","users","{{viewerUserId}}","assign","{{roleId}}"]
+            }
+          }
+        },
+
+        {
+          "name": "Revoke Role from User (viewer)",
+          "event": [{
+            "listen": "test",
+            "script": {
+              "exec": ["pm.test('Status 204', () => pm.expect(pm.response.code).to.equal(204));"],
+              "type": "text/javascript"
+            }
+          }],
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{accessToken}}", "type": "string" }] },
+            "method": "DELETE",
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/tenants/{{tenantId}}/roles/users/{{viewerUserId}}/revoke/{{roleId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api","v1","tenants","{{tenantId}}","roles","users","{{viewerUserId}}","revoke","{{roleId}}"]
+            }
+          }
+        },
+
+        {
+          "name": "Delete Role (soft delete)",
+          "description": "Soft-deletes the test role created above. Requires roleId to be set.",
+          "event": [{
+            "listen": "test",
+            "script": {
+              "exec": ["pm.test('Status 204', () => pm.expect(pm.response.code).to.equal(204));"],
+              "type": "text/javascript"
+            }
+          }],
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{accessToken}}", "type": "string" }] },
+            "method": "DELETE",
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/tenants/{{tenantId}}/roles/{{roleId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api","v1","tenants","{{tenantId}}","roles","{{roleId}}"]
+            }
+          }
+        }
+
+      ]
+    },
+
+    {
+      "name": "4. Policies",
+      "description": "Only POST (create) and DELETE are implemented. No GET or PUT endpoints exist.",
+      "item": [
+
+        {
+          "name": "Create Policy",
+          "description": "effect: 1=Allow, 2=Deny (integer). conditionTreeJson: must be a serialised JSON string, not a nested object.",
+          "event": [{
+            "listen": "test",
+            "script": {
+              "exec": [
+                "pm.test('Status 201', () => pm.expect(pm.response.code).to.equal(201));",
+                "if (pm.response.code !== 201) return;",
+                "const id = pm.response.json().id;",
+                "pm.collectionVariables.set('policyId', id);",
+                "pm.test('policyId saved: ' + id, () => pm.expect(id).to.be.a('string'));"
+              ],
+              "type": "text/javascript"
+            }
+          }],
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{accessToken}}", "type": "string" }] },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"postman-test-policy\",\n  \"description\": \"Test policy from Postman\",\n  \"effect\": 1,\n  \"conditionTreeJson\": \"{\\\"type\\\":\\\"simple\\\",\\\"operator\\\":\\\"eq\\\",\\\"attribute\\\":\\\"user.department\\\",\\\"value\\\":\\\"engineering\\\"}\",\n  \"resourceId\": null,\n  \"action\": null\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/api/v1/tenants/{{tenantId}}/policies", "host": ["{{baseUrl}}"], "path": ["api","v1","tenants","{{tenantId}}","policies"] }
+          }
+        },
+
+        {
+          "name": "Delete Policy",
+          "event": [{
+            "listen": "test",
+            "script": {
+              "exec": ["pm.test('Status 204', () => pm.expect(pm.response.code).to.equal(204));"],
+              "type": "text/javascript"
+            }
+          }],
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{accessToken}}", "type": "string" }] },
+            "method": "DELETE",
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/tenants/{{tenantId}}/policies/{{policyId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api","v1","tenants","{{tenantId}}","policies","{{policyId}}"]
+            }
+          }
+        }
+
+      ]
+    },
+
+    {
+      "name": "5. Delegations",
+      "description": "Only POST (create) and DELETE (revoke) are implemented. No GET endpoint exists.\n\nDelegator (delegator@acme.test) has content-editor role ONLY in the alpha scope (scopeId_alpha). Delegation must use scopeId_alpha and a permission the content-editor role holds.",
+      "item": [
+
+        {
+          "name": "Create Delegation (as delegator)",
+          "description": "Uses {{delegatorToken}}. Delegates 'roles:read' from delegator → delegatee at alpha scope. The delegator holds this permission via content-editor role at alpha scope.",
+          "event": [{
+            "listen": "test",
+            "script": {
+              "exec": [
+                "pm.test('Status 201', () => pm.expect(pm.response.code).to.equal(201));",
+                "if (pm.response.code !== 201) return;",
+                "const id = pm.response.json().id;",
+                "pm.collectionVariables.set('delegationId', id);",
+                "pm.test('delegationId saved: ' + id, () => pm.expect(id).to.be.a('string'));"
+              ],
+              "type": "text/javascript"
+            }
+          }],
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{delegatorToken}}", "type": "string" }] },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"delegateeId\": \"{{delegateeUserId}}\",\n  \"permissionCodes\": [\"roles:read\"],\n  \"scopeId\": \"{{scopeId_alpha}}\",\n  \"expiresAt\": \"2027-01-01T00:00:00Z\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/api/v1/tenants/{{tenantId}}/delegations", "host": ["{{baseUrl}}"], "path": ["api","v1","tenants","{{tenantId}}","delegations"] }
+          }
+        },
+
+        {
+          "name": "Revoke Delegation (early)",
+          "description": "DELETE /delegations/{did}. Marks the delegation revoked, busts delegation cache, increments token version for delegatee.",
+          "event": [{
+            "listen": "test",
+            "script": {
+              "exec": ["pm.test('Status 204', () => pm.expect(pm.response.code).to.equal(204));"],
+              "type": "text/javascript"
+            }
+          }],
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{accessToken}}", "type": "string" }] },
+            "method": "DELETE",
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/tenants/{{tenantId}}/delegations/{{delegationId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api","v1","tenants","{{tenantId}}","delegations","{{delegationId}}"]
+            }
+          }
+        }
+
+      ]
+    },
+
+    {
+      "name": "6. Permission Checks",
+      "description": "POST /api/v1/tenants/{tid}/permissions/check\nAll fields (userId, action, resourceId, scopeId) are required.",
+      "item": [
+
+        {
+          "name": "Admin — Granted (users:read at org)",
+          "description": "admin has tenant-admin role with all permissions at org scope → Granted.",
+          "event": [{
+            "listen": "test",
+            "script": {
+              "exec": [
+                "pm.test('Status 200', () => pm.expect(pm.response.code).to.equal(200));",
+                "if (pm.response.code !== 200) return;",
+                "const b = pm.response.json();",
+                "pm.test('decision is Granted', () => pm.expect(b.decision).to.equal('Granted'));",
+                "pm.test('has evaluatedPolicies array', () => pm.expect(b.evaluatedPolicies).to.be.an('array'));",
+                "pm.test('cacheHit is boolean', () => pm.expect(typeof b.cacheHit).to.equal('boolean'));",
+                "console.log('decision:', b.decision, '| cacheHit:', b.cacheHit, '| latencyMs:', b.evaluationLatencyMs);"
+              ],
+              "type": "text/javascript"
+            }
+          }],
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{accessToken}}", "type": "string" }] },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"userId\": \"{{userId}}\",\n  \"action\": \"users:read\",\n  \"resourceId\": \"{{resourceId}}\",\n  \"scopeId\": \"{{scopeId_org}}\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/api/v1/tenants/{{tenantId}}/permissions/check", "host": ["{{baseUrl}}"], "path": ["api","v1","tenants","{{tenantId}}","permissions","check"] }
+          }
+        },
+
+        {
+          "name": "Viewer — Denied (users:delete at org)",
+          "description": "viewer role has read-only permissions → Denied for users:delete.",
+          "event": [{
+            "listen": "test",
+            "script": {
+              "exec": [
+                "pm.test('Status 200', () => pm.expect(pm.response.code).to.equal(200));",
+                "if (pm.response.code !== 200) return;",
+                "const b = pm.response.json();",
+                "pm.test('decision is Denied', () => pm.expect(b.decision).to.equal('Denied'));",
+                "pm.test('deniedReason present', () => pm.expect(b.deniedReason).to.be.a('string'));",
+                "console.log('decision:', b.decision, '| deniedReason:', b.deniedReason);"
+              ],
+              "type": "text/javascript"
+            }
+          }],
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{accessToken}}", "type": "string" }] },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"userId\": \"{{viewerUserId}}\",\n  \"action\": \"users:delete\",\n  \"resourceId\": \"{{resourceId}}\",\n  \"scopeId\": \"{{scopeId_org}}\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/api/v1/tenants/{{tenantId}}/permissions/check", "host": ["{{baseUrl}}"], "path": ["api","v1","tenants","{{tenantId}}","permissions","check"] }
+          }
+        },
+
+        {
+          "name": "Missing Required Fields (expect 400)",
+          "description": "Omitting action, resourceId, scopeId → controller validates and returns 400.",
+          "event": [{
+            "listen": "test",
+            "script": {
+              "exec": [
+                "pm.test('Missing fields → 400', () => pm.expect(pm.response.code).to.equal(400));"
+              ],
+              "type": "text/javascript"
+            }
+          }],
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{accessToken}}", "type": "string" }] },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"userId\": \"{{userId}}\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/api/v1/tenants/{{tenantId}}/permissions/check", "host": ["{{baseUrl}}"], "path": ["api","v1","tenants","{{tenantId}}","permissions","check"] }
+          }
+        },
+
+        {
+          "name": "Scope Inheritance — admin roles:create at org",
+          "description": "Admin has tenant-admin role assigned at org scope. Checking roles:create at org scope → Granted via scope inheritance.",
+          "event": [{
+            "listen": "test",
+            "script": {
+              "exec": [
+                "pm.test('Status 200', () => pm.expect(pm.response.code).to.equal(200));",
+                "if (pm.response.code !== 200) return;",
+                "const b = pm.response.json();",
+                "pm.test('decision is Granted (scope inheritance)', () => pm.expect(b.decision).to.equal('Granted'));",
+                "console.log('decision:', b.decision, '| effectiveRoles:', JSON.stringify(b.effectiveRoles));"
+              ],
+              "type": "text/javascript"
+            }
+          }],
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{accessToken}}", "type": "string" }] },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"userId\": \"{{userId}}\",\n  \"action\": \"roles:create\",\n  \"resourceId\": \"{{resourceId}}\",\n  \"scopeId\": \"{{scopeId_org}}\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/api/v1/tenants/{{tenantId}}/permissions/check", "host": ["{{baseUrl}}"], "path": ["api","v1","tenants","{{tenantId}}","permissions","check"] }
+          }
+        },
+
+        {
+          "name": "Cache Hit — second call (same params)",
+          "description": "Run this immediately after 'Admin — Granted'. cacheHit should be true (L1 or L2 hit). P50 target <5ms.",
+          "event": [{
+            "listen": "test",
+            "script": {
+              "exec": [
+                "pm.test('Status 200', () => pm.expect(pm.response.code).to.equal(200));",
+                "if (pm.response.code !== 200) return;",
+                "const b = pm.response.json();",
+                "pm.test('decision still Granted', () => pm.expect(b.decision).to.equal('Granted'));",
+                "pm.test('cacheHit is true', () => pm.expect(b.cacheHit).to.be.true);",
+                "console.log('cacheHit:', b.cacheHit, '| latencyMs:', b.evaluationLatencyMs);"
+              ],
+              "type": "text/javascript"
+            }
+          }],
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{accessToken}}", "type": "string" }] },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"userId\": \"{{userId}}\",\n  \"action\": \"users:read\",\n  \"resourceId\": \"{{resourceId}}\",\n  \"scopeId\": \"{{scopeId_org}}\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/api/v1/tenants/{{tenantId}}/permissions/check", "host": ["{{baseUrl}}"], "path": ["api","v1","tenants","{{tenantId}}","permissions","check"] }
+          }
+        },
+
+        {
+          "name": "Editor at Engineering scope — users:read",
+          "description": "editor user (654254b3) has content-editor role. Checking users:read at engineering scope.",
+          "event": [{
+            "listen": "test",
+            "script": {
+              "exec": [
+                "pm.test('Status 200', () => pm.expect(pm.response.code).to.equal(200));",
+                "if (pm.response.code !== 200) return;",
+                "const b = pm.response.json();",
+                "console.log('decision:', b.decision, '| deniedReason:', b.deniedReason, '| cacheHit:', b.cacheHit);"
+              ],
+              "type": "text/javascript"
+            }
+          }],
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{accessToken}}", "type": "string" }] },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"userId\": \"{{editorUserId}}\",\n  \"action\": \"users:read\",\n  \"resourceId\": \"{{resourceId}}\",\n  \"scopeId\": \"{{scopeId_engineering}}\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/api/v1/tenants/{{tenantId}}/permissions/check", "host": ["{{baseUrl}}"], "path": ["api","v1","tenants","{{tenantId}}","permissions","check"] }
+          }
+        }
+
+      ]
+    },
+
+    {
+      "name": "7. Audit Logs",
+      "description": "GET /api/v1/tenants/{tid}/audit-logs\nSupports: page, pageSize, userId, action, resourceId, from, to (UTC ISO-8601).\nAccept: text/csv triggers CSV export.",
+      "item": [
+
+        {
+          "name": "Get Audit Logs (latest 10)",
+          "event": [{
+            "listen": "test",
+            "script": {
+              "exec": [
+                "pm.test('Status 200', () => pm.expect(pm.response.code).to.equal(200));",
+                "if (pm.response.code !== 200) return;",
+                "const b = pm.response.json();",
+                "pm.test('has data array', () => pm.expect(b.data).to.be.an('array'));",
+                "pm.test('has total field',  () => pm.expect(b.total).to.be.a('number'));",
+                "console.log('total audit logs:', b.total, '| returned:', b.data.length);"
+              ],
+              "type": "text/javascript"
+            }
+          }],
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{accessToken}}", "type": "string" }] },
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/tenants/{{tenantId}}/audit-logs?page=1&pageSize=10",
+              "host": ["{{baseUrl}}"],
+              "path": ["api","v1","tenants","{{tenantId}}","audit-logs"],
+              "query": [
+                { "key": "page",     "value": "1" },
+                { "key": "pageSize", "value": "10" }
+              ]
+            }
+          }
+        },
+
+        {
+          "name": "Audit Logs — Filter by User (admin)",
+          "event": [{
+            "listen": "test",
+            "script": {
+              "exec": [
+                "pm.test('Status 200', () => pm.expect(pm.response.code).to.equal(200));",
+                "if (pm.response.code !== 200) return;",
+                "const b = pm.response.json();",
+                "pm.test('all entries are for admin user', () => {",
+                "    b.data.forEach(l => pm.expect(l.actorUserId).to.equal(pm.collectionVariables.get('userId')));",
+                "});"
+              ],
+              "type": "text/javascript"
+            }
+          }],
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{accessToken}}", "type": "string" }] },
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/tenants/{{tenantId}}/audit-logs?userId={{userId}}&page=1&pageSize=20",
+              "host": ["{{baseUrl}}"],
+              "path": ["api","v1","tenants","{{tenantId}}","audit-logs"],
+              "query": [
+                { "key": "userId",   "value": "{{userId}}" },
+                { "key": "page",     "value": "1" },
+                { "key": "pageSize", "value": "20" }
+              ]
+            }
+          }
+        },
+
+        {
+          "name": "Audit Logs — Date Range (UTC)",
+          "description": "from and to must be UTC ISO-8601 (e.g. 2026-01-01T00:00:00Z). Non-UTC offsets cause 500 in Npgsql.",
+          "event": [{
+            "listen": "test",
+            "script": {
+              "exec": ["pm.test('Status 200', () => pm.expect(pm.response.code).to.equal(200));"],
+              "type": "text/javascript"
+            }
+          }],
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{accessToken}}", "type": "string" }] },
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/tenants/{{tenantId}}/audit-logs?from=2026-01-01T00:00:00Z&to=2027-01-01T00:00:00Z&page=1&pageSize=50",
+              "host": ["{{baseUrl}}"],
+              "path": ["api","v1","tenants","{{tenantId}}","audit-logs"],
+              "query": [
+                { "key": "from",     "value": "2026-01-01T00:00:00Z" },
+                { "key": "to",       "value": "2027-01-01T00:00:00Z" },
+                { "key": "page",     "value": "1" },
+                { "key": "pageSize", "value": "50" }
+              ]
+            }
+          }
+        },
+
+        {
+          "name": "Audit Logs — CSV Export",
+          "description": "Set Accept: text/csv to trigger CSV file download.",
+          "event": [{
+            "listen": "test",
+            "script": {
+              "exec": ["pm.test('Status 200', () => pm.expect(pm.response.code).to.equal(200));"],
+              "type": "text/javascript"
+            }
+          }],
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{accessToken}}", "type": "string" }] },
+            "method": "GET",
+            "header": [{ "key": "Accept", "value": "text/csv" }],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/tenants/{{tenantId}}/audit-logs?page=1&pageSize=100",
+              "host": ["{{baseUrl}}"],
+              "path": ["api","v1","tenants","{{tenantId}}","audit-logs"],
+              "query": [
+                { "key": "page",     "value": "1" },
+                { "key": "pageSize", "value": "100" }
+              ]
+            }
+          }
+        }
+
+      ]
+    }
+
+  ]
+}

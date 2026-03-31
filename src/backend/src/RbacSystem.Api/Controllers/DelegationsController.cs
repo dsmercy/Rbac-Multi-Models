@@ -32,8 +32,7 @@ public sealed class DelegationsController : ControllerBase
             request.ExpiresAt,
             callerId), ct);
 
-        return CreatedAtAction(nameof(CreateDelegation),
-            new { tid, did = id }, new { id });
+        return Created($"api/v1/tenants/{tid}/delegations/{id}", new { id });
     }
 
     [HttpDelete("{did:guid}")]
@@ -46,7 +45,7 @@ public sealed class DelegationsController : ControllerBase
 
     private Guid GetCallerId()
     {
-        var claim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+        var claim = User.FindFirst("sub")?.Value;
         return Guid.TryParse(claim, out var id) ? id : Guid.Empty;
     }
 }

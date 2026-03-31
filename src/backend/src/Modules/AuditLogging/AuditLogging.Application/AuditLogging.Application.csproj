@@ -9,11 +9,7 @@
 
   <ItemGroup>
     <ProjectReference Include="../AuditLogging.Domain/AuditLogging.Domain.csproj" />
-    <ProjectReference Include="../../Identity/Identity.Domain/Identity.Domain.csproj" />
-    <ProjectReference Include="../../RbacCore/RbacCore.Domain/RbacCore.Domain.csproj" />
-    <ProjectReference Include="../../PolicyEngine/PolicyEngine.Domain/PolicyEngine.Domain.csproj" />
-    <ProjectReference Include="../../Delegation/Delegation.Domain/Delegation.Domain.csproj" />
-    <ProjectReference Include="../../TenantManagement/TenantManagement.Domain/TenantManagement.Domain.csproj" />
+    <ProjectReference Include="../../../BuildingBlocks/BuildingBlocks.Domain/BuildingBlocks.Domain.csproj" />
   </ItemGroup>
 
 </Project>

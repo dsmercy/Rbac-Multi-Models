@@ -15,7 +15,10 @@
 using AuditLogging.Application.Services;
 using Delegation.Application.Common;
 using Delegation.Application.Services;
+using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Options;
 using NSubstitute;
+using PermissionEngine.Application;
 using PermissionEngine.Application.Pipeline;
 using PermissionEngine.Application.Services;
 using PermissionEngine.Domain.Interfaces;
@@ -156,6 +159,14 @@ public sealed class MockDependencies
         RbacSvc.GetAncestorScopeIdsAsync(Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Any<CancellationToken>())
                .Returns((IReadOnlyList<Guid>)Array.Empty<Guid>());
 
+        // ScopeInheritanceStep + DelegationCheckStep cache: miss by default
+        Cache.GetUserPermissionCodesAsync(Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Any<CancellationToken>())
+             .Returns((IReadOnlyList<string>?)null);
+        Cache.GetScopeAncestorsAsync(Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Any<CancellationToken>())
+             .Returns((IReadOnlyList<Guid>?)null);
+        Cache.GetDelegationJsonAsync(Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Any<CancellationToken>())
+             .Returns((string?)null);
+
         // No effective permissions
         RbacSvc.GetEffectivePermissionsAsync(
                 Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Any<Guid?>(),
@@ -183,14 +194,16 @@ public sealed class MockDependencies
             new TokenVersionValidationStep(Cache),
             new GlobalDenyStep(PolicyEngine),
             new ResourceLevelOverrideStep(PolicyEngine),
-            new DelegationCheckStep(DelegSvc, RbacSvc, TenantSvc),
-            new ScopeInheritanceStep(RbacSvc),
+            new DelegationCheckStep(DelegSvc, RbacSvc, TenantSvc, Cache),
+            new ScopeInheritanceStep(RbacSvc, Cache),
             new AbacPolicyStep(PolicyEngine),
             new RbacPermissionCheckStep(),
             new DefaultDenyStep(),
         };
 
-        return new PermissionEngineService(steps, Cache, AuditLogger, TenantSvc);
+        return new PermissionEngineService(steps, Cache, AuditLogger, TenantSvc,
+            NullLogger<PermissionEngineService>.Instance,
+            Options.Create(new EvaluationOptions()));
     }
 
     // ── Setup helpers ─────────────────────────────────────────────────────────

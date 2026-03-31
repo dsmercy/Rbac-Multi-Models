@@ -4,7 +4,7 @@
 
 using BuildingBlocks.Domain;
 using Delegation.Domain.Entities;
-using Delegation.Domain.Events;
+using BuildingBlocks.Domain.Events;
 using FluentAssertions;
 using Xunit;
 

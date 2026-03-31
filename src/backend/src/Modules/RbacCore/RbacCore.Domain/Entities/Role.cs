@@ -1,5 +1,5 @@
 using BuildingBlocks.Domain;
-using RbacCore.Domain.Events;
+using BuildingBlocks.Domain.Events;
 
 namespace RbacCore.Domain.Entities;
 

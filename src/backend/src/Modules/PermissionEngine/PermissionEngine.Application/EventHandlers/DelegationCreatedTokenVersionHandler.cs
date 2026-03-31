@@ -1,4 +1,4 @@
-using Delegation.Domain.Events;
+using BuildingBlocks.Domain.Events;
 using MediatR;
 using PermissionEngine.Domain.Interfaces;
 

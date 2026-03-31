@@ -1,0 +1,386 @@
+
+You are a senior software architect and security expert with deep experience in building enterprise IAM systems similar to Microsoft Azure RBAC and AWS IAM.
+
+I am a senior full-stack developer building a **production-grade Modular Monolith RBAC system using Clean Architecture**, with the goal to later evolve it into microservices.
+
+Your task is to generate a **complete, implementation-ready system design, architecture, and development plan**, structured across the 7 phases defined below. Each phase must be completed in sequence before proceeding to the next — do not skip ahead or merge phases.
+
+---
+
+# 🎯 Objective
+
+Design a **scalable, extensible, and enterprise-ready RBAC system** that supports:
+
+* **Multi-tenancy** — A single application instance securely serves multiple independent organizations with fully isolated data and configurations.
+* **RBAC (roles & permissions)** — Permissions grouped into roles and assigned to users to manage access efficiently.
+* **Scoped access (hierarchy)** — Permissions applied within a hierarchical context (organization → department → project) with controlled downward inheritance.
+* **ABAC (attributes)** — Access decisions based on attributes of users, resources, and environment conditions.
+* **Policies (rules engine)** — Dynamic rule-based evaluation of conditions, using JSON condition trees (AWS IAM-style), stored in the database and evaluated at runtime.
+* **Delegation & time-bound access** — Users may temporarily grant a subset of their own access rights to others for a defined period.
+* **Auditability** — Full tracking of all access decisions, permission changes, and administrative actions for security and compliance.
+
+---
+
+# 🏗️ Phase 1 — Architecture & Design Decisions
+
+## Architecture Style
+
+* Modular Monolith using Clean Architecture
+* Clearly separated layers per module: Domain → Application → Infrastructure → API
+* Each module must be independently extractable into a microservice without changing its internal contracts
+
+## Module Design
+
+Define the following bounded modules. For each module provide:
+* **(a)** Public service interfaces it exposes to other modules
+* **(b)** Domain events it emits (name + payload shape)
+* **(c)** Data it owns exclusively vs. data it reads from other modules
+* **(d)** Anti-corruption layer pattern used when reading cross-module data (no direct cross-module DB joins permitted)
+
+Modules:
+* **Identity Module** — user identity, credentials, authentication
+* **Tenant Management Module** — tenant lifecycle, configuration, bootstrapping
+* **RBAC Core Module** — roles, permissions, assignments
+* **Permission Engine Module** — the `CanUserAccess` evaluator
+* **Policy Engine Module** — JSON condition tree storage and evaluation
+* **Delegation Module** — time-bound delegation lifecycle
+* **Audit & Logging Module** — append-only event log
+
+Domain events to define (minimum): `UserCreated`, `UserRoleAssigned`, `UserRoleRevoked`, `RoleCreated`, `RoleDeleted`, `PermissionGranted`, `PermissionRevoked`, `PolicyCreated`, `PolicyUpdated`, `PolicyDeleted`, `DelegationCreated`, `DelegationRevoked`, `DelegationExpired`, `TenantCreated`, `TenantSuspended`
+
+## Multi-Tenancy Isolation Model
+
+* Use **row-level isolation** (shared schema, TenantId on every tenant-scoped table)
+* Enforce via **global EF Core query filters** on every `DbContext` — TenantId must be injected automatically from the ambient request context; no query may rely on developers manually adding `WHERE TenantId = ?`
+* Document the tradeoffs vs. schema-per-tenant and database-per-tenant
+* Design a **super-admin role** that operates outside tenant isolation boundaries (platform-level operations only) — document its claims, how it bypasses tenant filters safely, and how its usage is audited
+* Define tenant bootstrapping: on first tenant creation, automatically seed a default admin user, a default `tenant-admin` role with full permissions within that tenant, and a set of default permission templates. Solve the chicken-and-egg problem explicitly.
+
+## Technology Stack
+
+Backend: .NET 8 Web API, Clean Architecture, MediatR (CQRS)
+Database: PostgreSQL (primary), Azure SQL (supported)
+ORM: Entity Framework Core (primary) + Dapper (performance-critical read queries)
+Caching: Redis (mandatory)
+Auth: JWT + OAuth2 / OpenID Connect
+Frontend: React + TypeScript (Admin Panel)
+Messaging (future-ready): Kafka / Azure Service Bus for async domain events
+
+## Data Lifecycle Rules
+
+* **Soft delete only** — roles, permissions, and assignments must never be physically deleted. Use a `DeletedAt` timestamp. Queries must exclude soft-deleted records by default via global EF Core filters.
+* **Audit logs are immutable and append-only** — no update or delete operations permitted on audit log records. Archive to cold storage after retention period.
+* **Cascade on soft delete**: when a role is soft-deleted, all active `RoleAssignments` referencing it must be automatically deactivated (not deleted) with a `DeactivatedReason = "RoleDeleted"` marker.
+* **Data retention policy**: define per-entity retention periods (e.g. audit logs: 7 years, soft-deleted roles: 2 years before archival). Include GDPR right-to-erasure handling — pseudonymise rather than delete audit log actor references.
+
+---
+
+# 🗃️ Phase 2 — Database Schema
+
+Provide the complete schema including:
+
+* Tables: `Tenants`, `Users`, `Roles`, `Permissions`, `RolePermissions`, `UserRoleAssignments`, `Scopes`, `ScopeHierarchy`, `Policies`, `PolicyConditions`, `Delegations`, `AuditLogs`
+* All columns with data types, nullability, and defaults
+* Primary keys, foreign keys, and unique constraints
+* **Indexing strategy**: for every table, specify which columns are indexed and why (tenant filtering, permission lookup hot paths, audit log time-range queries)
+* Multi-tenant filtering: identify every table that requires a `TenantId` column and confirm global EF filter coverage
+* Soft delete columns: `DeletedAt`, `IsDeleted` on all applicable tables
+* `ScopeHierarchy` must support arbitrary depth using a closure table or ltree pattern — specify which and why
+
+---
+
+# ⚙️ Phase 3 — Permission Evaluation Engine
+
+Design the core method:
+
+```
+Task<AccessResult> CanUserAccess(UserId, Action, ResourceId, ScopeId, EvaluationContext)
+```
+
+`EvaluationContext` carries: tenant ID, delegation chain (if any), user attributes, resource attributes, environment attributes (time, IP, etc.), request correlation ID.
+
+## Evaluation Algorithm (strict precedence order)
+
+Implement as a pipeline with explicit short-circuit conditions:
+
+1. **Explicit global deny** — if any active policy on the tenant/resource returns an unconditional DENY, return `Denied` immediately. Do not evaluate further.
+2. **Resource-level override** — check for a direct permission grant or deny scoped to the exact `ResourceId`. An explicit resource-level DENY here also short-circuits. An explicit ALLOW here proceeds to delegation check before final grant.
+3. **Delegation check** — if an active, non-expired delegation exists for this user on this action+scope, validate: (a) delegator still holds the permission being delegated, (b) delegation has not been revoked, (c) chain depth ≤ configured max (default: 1, configurable per tenant). If valid, continue evaluation as the delegator's effective permissions. Log the delegation chain in the audit record.
+4. **Scope inheritance resolution** — resolve the user's effective roles by walking the scope hierarchy upward (project → department → organization). A role granted at a higher scope is inherited downward unless an explicit scope-level deny exists at a lower level. Document the exact traversal algorithm.
+5. **ABAC policy evaluation** — evaluate all applicable JSON condition tree policies. Each policy is evaluated independently. If any policy returns DENY, short-circuit to `Denied`. If all applicable policies return ALLOW (or no applicable policies exist), continue.
+6. **Role-based permission check** — check if any of the user's effective roles (from step 4) include the requested action on the requested resource type. Apply deny-overrides-allow: if the user holds both a permitting role and a denying role for the same action, DENY wins.
+7. **Default deny** — if no rule has granted access by this point, return `Denied`.
+
+## Conflict Resolution Rules
+
+* Explicit deny always beats explicit allow at the same precedence level
+* A permission granted at a lower scope (more specific) overrides an inherited permission from a higher scope
+* Among roles at the same scope level with conflicting permissions: DENY wins
+* Among policies at the same evaluation step: any DENY short-circuits (first-deny wins)
+
+## Return Value
+
+`AccessResult` must include: `Granted | Denied`, `DeniedReason` (enum), `EvaluatedPolicies[]`, `EffectiveRoles[]`, `DelegationChainUsed` (nullable), `CacheHit` (bool), `EvaluationLatencyMs`
+
+---
+
+# 🔒 Phase 4 — JWT Token Design & Authentication
+
+## Claims Schema
+
+Define the exact JWT payload:
+
+```json
+{
+  "sub": "uuid",
+  "tid": "tenant-uuid",
+  "email": "string",
+  "roles": ["role-id-1", "role-id-2"],
+  "scp": ["org:uuid", "dept:uuid"],
+  "del": "delegator-user-uuid | null",
+  "del_chain": ["uuid1", "uuid2"],
+  "is_super_admin": false,
+  "jti": "token-uuid",
+  "iat": 0,
+  "exp": 0
+}
+```
+
+## Embed vs. Lookup Strategy
+
+* **Embed roles and scopes in the token** for performance (avoid a DB round-trip on every request)
+* **Mandatory re-validation gate**: on any request where the permission engine is invoked, check a Redis key `token-version:{userId}` against the `tv` claim in the token. If the token version is stale (role was changed after token was issued), reject with `401` and force re-authentication.
+* **Token version increment triggers**: any `UserRoleAssigned`, `UserRoleRevoked`, `DelegationCreated`, `DelegationRevoked` event must atomically increment the user's token version in Redis.
+* Define access token TTL (recommended: 15 minutes) and refresh token TTL (recommended: 7 days, sliding).
+
+## Failure Handling
+
+* Corrupt or malformed JWT → `401 Unauthorized`, log the attempt with IP and user agent
+* Expired access token with valid refresh token → issue new access token silently
+* Expired refresh token → `401`, redirect to login
+* Token with stale version (`tv` mismatch) → `401`, invalidate refresh token, force re-login
+* Super-admin token used on tenant-scoped endpoint → validate `tid` claim is present; if missing, inject a system tenant context
+
+---
+
+# 🔧 Phase 5 — Module Scaffolding & Project Structure
+
+## Solution Structure
+
+Provide the full folder and project naming convention:
+
+```
+/src
+  /Modules
+    /Identity
+      Identity.Domain
+      Identity.Application
+      Identity.Infrastructure
+      Identity.API
+    /TenantManagement
+    /RbacCore
+    /PermissionEngine
+    /PolicyEngine
+    /Delegation
+    /Audit
+  /SharedKernel
+    SharedKernel.Domain        ← base entity, aggregate root, domain event
+    SharedKernel.Application   ← base CQRS interfaces, ICurrentTenantContext
+    SharedKernel.Infrastructure ← EF base context, Redis client, outbox pattern
+  /ApiGateway                  ← single entry-point API project
+```
+
+## Module Contract Rules
+
+* Modules communicate exclusively via: (a) direct calls to published service interfaces, or (b) domain events via an in-process event bus (MediatR notifications now; swap to Kafka/Service Bus later without changing publishers)
+* No module may reference another module's `Infrastructure` or `Domain` project directly
+* Cross-module data reads use a read model / projection, not a JOIN across module DB tables
+
+## Caching Architecture
+
+### Cache Key Structure
+
+Define key schemas for all cache layers:
+
+```
+perm:{tenantId}:{userId}:{action}:{resourceType}:{scopeId}   → AccessResult (TTL: 60s)
+roles:{tenantId}:{userId}                                      → string[] role IDs (TTL: 300s)
+policy:{tenantId}:{policyId}                                   → PolicyDocument (TTL: 600s)
+token-version:{userId}                                         → int version (TTL: sliding, 7d)
+scope-tree:{tenantId}                                          → ScopeNode[] hierarchy (TTL: 3600s)
+delegation:{tenantId}:{userId}                                 → Delegation[] active (TTL: 60s)
+```
+
+### TTL Policy by Sensitivity
+
+| Data | TTL | Rationale |
+|---|---|---|
+| Full permission eval result | 60s | Short — revocation must propagate quickly |
+| User role list | 300s | Medium — role changes are less frequent |
+| Policy documents | 600s | Policies change rarely in normal operation |
+| Scope hierarchy | 3600s | Structural, changes very infrequently |
+| Token version | Sliding 7d | Must survive refresh token lifetime |
+| Active delegations | 60s | Time-sensitive — expiry must be respected |
+
+### Eviction Trigger Map
+
+For each domain event, specify which cache keys must be invalidated:
+
+* `UserRoleAssigned` / `UserRoleRevoked` → bust `perm:{tid}:{uid}:*`, `roles:{tid}:{uid}`, increment `token-version:{uid}`
+* `PolicyCreated` / `PolicyUpdated` / `PolicyDeleted` → bust `perm:{tid}:*`, `policy:{tid}:{policyId}`
+* `RoleDeleted` → bust `perm:{tid}:*`, `roles:{tid}:*` for all users holding that role
+* `DelegationCreated` / `DelegationRevoked` / `DelegationExpired` → bust `perm:{tid}:{uid}:*`, `delegation:{tid}:{uid}`, increment `token-version:{uid}`
+* `ScopeUpdated` → bust `scope-tree:{tid}`, `perm:{tid}:*`
+* `TenantSuspended` → bust all keys under `*:{tid}:*`
+
+### Stampede Protection
+
+Use probabilistic early expiration (PER algorithm): when remaining TTL < 10% of original TTL and traffic is high, probabilistically refresh the key before it expires. Alternatively, use a Redis `SET NX` lock: first request past expiry acquires a short lock (2s) and recomputes; all others serve stale value during recompute.
+
+### Distributed Invalidation
+
+On cache bust events, publish an `InvalidateCache` message to a Redis pub/sub channel `cache-invalidation:{tenantId}`. All app instances subscribe and bust their local in-memory L1 cache (if used). Redis itself is the L2 and does not need cross-instance coordination.
+
+## Failure Modes & Resilience
+
+| Failure | Behaviour |
+|---|---|
+| Redis unavailable | Fall through to DB for permission evaluation. Log degraded mode. Do not deny all (availability over strict security in degraded state — document this decision explicitly and make it configurable per deployment). |
+| Eval timeout (> 200ms) | Return `Denied` (fail-closed). Log timeout with full context. Alert if rate > 1% of requests. |
+| Partial policy failure (one rule errors) | Skip the errored rule, log a warning, continue evaluation. If > 50% of applicable policies error in one request, fail-closed. |
+| Corrupt JWT | Return `401`. Log IP, user agent, raw token hash. Never log raw token value. |
+| DB unavailable during eval | Return `503 Service Unavailable`, not `403`. Caller must distinguish infra failure from permission denial. |
+
+---
+
+# 🌐 Phase 6 — API Design
+
+## Versioning Strategy
+
+* Use URL path versioning: `/api/v1/`, `/api/v2/`
+* Maintain N-1 compatibility: when v2 ships, v1 is deprecated but supported for 6 months
+* Breaking changes require a version bump; additive changes (new optional fields) do not
+* Deprecation communicated via `Deprecation` and `Sunset` response headers
+
+## REST Endpoints
+
+Provide request/response examples for all of the following:
+
+**Tenant Management**: `POST /api/v1/tenants`, `GET /api/v1/tenants/{id}`, `PUT /api/v1/tenants/{id}`, `DELETE /api/v1/tenants/{id}` (soft)
+
+**User Management**: `POST /api/v1/tenants/{tid}/users`, `GET /api/v1/tenants/{tid}/users/{uid}`, `PUT /api/v1/tenants/{tid}/users/{uid}`
+
+**Role Management**: `POST /api/v1/tenants/{tid}/roles`, `GET /api/v1/tenants/{tid}/roles`, `PUT /api/v1/tenants/{tid}/roles/{rid}`, `DELETE /api/v1/tenants/{tid}/roles/{rid}` (soft)
+
+**Permission Management**: `POST /api/v1/tenants/{tid}/permissions`, `GET /api/v1/tenants/{tid}/roles/{rid}/permissions`, `POST /api/v1/tenants/{tid}/roles/{rid}/permissions/{pid}` (assign), `DELETE /api/v1/tenants/{tid}/roles/{rid}/permissions/{pid}` (revoke)
+
+**Assignments**: `POST /api/v1/tenants/{tid}/users/{uid}/roles` (assign role + scope), `DELETE /api/v1/tenants/{tid}/users/{uid}/roles/{rid}`
+
+**Policy Management**: `POST /api/v1/tenants/{tid}/policies`, `GET /api/v1/tenants/{tid}/policies/{pid}`, `PUT /api/v1/tenants/{tid}/policies/{pid}`, `DELETE /api/v1/tenants/{tid}/policies/{pid}`
+
+**Delegation**: `POST /api/v1/tenants/{tid}/delegations`, `GET /api/v1/tenants/{tid}/delegations/{did}`, `DELETE /api/v1/tenants/{tid}/delegations/{did}` (early revoke)
+
+**Permission Check** (internal + external): `POST /api/v1/tenants/{tid}/permissions/check` — body: `{ userId, action, resourceId, scopeId }` — response: full `AccessResult`
+
+**Audit Logs**: `GET /api/v1/tenants/{tid}/audit-logs?from=&to=&userId=&action=&resourceId=&page=&pageSize=` — support export to CSV via `Accept: text/csv`
+
+## Security Hardening
+
+* Tenant isolation: every endpoint that takes `{tid}` must validate `tid` matches the `tid` claim in the JWT — reject with `403` if mismatch
+* Privilege escalation prevention: a user may not assign a role that grants more permissions than they themselves hold. Validate at assignment time using `CanUserAccess`.
+* OWASP API Top 10 mitigations: rate limiting (per user, per tenant), input validation via FluentValidation, no stack traces in error responses, `X-Content-Type-Options`, `X-Frame-Options`, `Strict-Transport-Security` headers
+
+---
+
+# 🔁 Phase 7 — Frontend, Observability & Infrastructure
+
+## Admin Panel (React + TypeScript)
+
+### Component Breakdown
+
+Deliver a full component tree for the following views:
+
+* **Role Editor** — create/edit role, assign permissions via checkbox matrix, scope selector
+* **Permission Matrix View** — read-only grid: roles (columns) × permissions (rows), with scope filter
+* **User-Role Assignment** — user search, role multi-select, scope picker, effective-date + expiry-date
+* **Policy Builder UI** — visual JSON condition tree composer (add condition node, choose operator, set attribute + value), preview rendered policy JSON, test policy against a sample context
+* **Delegation Manager** — create delegation (select delegatee, permissions subset, date range), list active delegations, revoke button with confirmation
+* **Audit Log Viewer** — filterable table (date range, user, action, resource, result), row expand for full `AccessResult` detail, CSV export button
+* **Tenant Dashboard** — tenant health summary (active users, roles, policies, recent denials chart)
+
+### UI-Level RBAC Enforcement
+
+The admin panel itself must be governed by the same RBAC system it manages. A user with `role:viewer` must see controls but not be able to submit mutations. A user with `role:permission-manager` can manage permissions but not create tenants. Implement using a React context (`AbilityContext`) that calls `POST /api/v1/permissions/check` on load and caches results for the session. Wrap all mutation buttons in an `<Authorized action="..." resource="...">` component that disables or hides them based on the result.
+
+### Real-Time Updates
+
+Use WebSocket (SignalR) for live updates: when a role or policy changes in the backend, push an `rbac:invalidated` event to all connected admin panel clients for that tenant. On receipt, the client refetches affected data and re-evaluates cached permission checks.
+
+## Observability
+
+### Structured Logging
+
+Every call to `CanUserAccess` must emit a structured log entry with fields:
+`correlationId`, `tenantId`, `userId`, `action`, `resourceId`, `scopeId`, `result` (Granted/Denied), `deniedReason`, `cacheHit`, `evaluationLatencyMs`, `delegationChainUsed`, `policiesEvaluated[]`, `timestamp`
+
+Use Serilog with a JSON sink. Never log raw JWT values, passwords, or PII beyond userId.
+
+### Distributed Tracing
+
+Instrument with OpenTelemetry. Propagate `traceparent` / `tracestate` headers. Create spans for: inbound request, cache lookup, DB query, each policy evaluation step, cache write. Export to Jaeger (local dev) or Azure Monitor (production).
+
+### Metrics
+
+Expose via Prometheus / OpenTelemetry metrics:
+* `rbac_eval_total{result="granted|denied", cache_hit="true|false", tenant_id}` — counter
+* `rbac_eval_duration_ms{quantile}` — histogram (P50, P95, P99 targets: <5ms cache hit, <50ms cache miss)
+* `rbac_active_delegations{tenant_id}` — gauge
+* `rbac_cache_evictions_total{key_type}` — counter
+* `rbac_policy_eval_errors_total` — counter
+
+### Alerting Rules
+
+Define alerts for: permission denial rate > 10% of requests over 5 minutes (potential attack), `rbac_eval_duration_ms` P99 > 200ms, `rbac_policy_eval_errors_total` > 0 for 2 minutes, Redis connectivity lost, delegation chain depth > configured max detected.
+
+## Delegation Rules
+
+* **Chain delegation**: by default, a delegatee may NOT re-delegate (chain depth max = 1). Configurable per tenant up to a hard platform limit of 3.
+* **Over-delegation prevention**: the permission engine must validate at delegation-creation time that every permission being delegated is currently held by the delegator. If the delegator later loses a permission, the delegation for that permission becomes ineffective (evaluated at check time, not at creation time).
+* **Acting-on-behalf audit**: every `AccessResult` produced via a delegation chain must record `ActingOnBehalfOf: { delegatorId, delegationId, chainDepth }` in the audit log entry.
+* **Early revocation**: `DELETE /api/v1/tenants/{tid}/delegations/{did}` immediately marks the delegation as revoked, busts `delegation:{tid}:{uid}` cache, increments `token-version:{uid}` of the delegatee, and emits `DelegationRevoked` event.
+* **In-flight handling on expiry**: expired delegations are checked at evaluation time (not via a background job), so no in-flight request can use an expired delegation even if the cache has not yet been evicted.
+
+## Infrastructure & Docker
+
+Provide a complete `docker-compose.yml` for local development including: PostgreSQL 16, Redis 7 (with persistence), Jaeger (tracing), Prometheus + Grafana (metrics). Include environment variable templates and a database initialization script that runs EF Core migrations on startup.
+
+### Migration Strategy
+
+* Use EF Core migrations exclusively for schema changes
+* Never modify an existing migration — always add a new one
+* Zero-downtime migration pattern: for breaking schema changes, use expand-contract (add new column nullable → backfill → add constraint → remove old column across separate deployments)
+* Seed data (default roles, permissions, system tenant) delivered via a dedicated `DataSeeder` service that runs idempotently on startup
+
+---
+
+# ✅ Cross-Cutting Requirements
+
+## Unit Test Strategy
+
+* Every domain model must have unit tests covering its invariants (e.g. a `Role` cannot be created with an empty name, a `Delegation` cannot have `ExpiresAt` in the past)
+* The permission evaluation pipeline (`CanUserAccess`) must have a unit test for every branch of the precedence chain — minimum 20 test cases covering: cache hit, each denial reason, delegation valid, delegation expired, scope inheritance, ABAC policy allow, ABAC policy deny, conflict resolution, super-admin bypass, cross-tenant rejection
+* Use xUnit + FluentAssertions. No mocking of domain logic — only infrastructure dependencies (Redis, DB) are mocked in unit tests.
+
+## Security Requirements
+
+* Tenant isolation is enforced at three layers: JWT claim validation (API layer), global EF Core query filter (infrastructure layer), and explicit tenantId parameter validation in all command/query handlers (application layer)
+* Privilege escalation: prevented at API layer (role assignment validates caller's own permissions), at domain layer (domain invariant on `RoleAssignment`), and tested explicitly in security test suite
+* All secrets (DB connection strings, JWT signing keys) via environment variables or Azure Key Vault — never in source code or appsettings committed to version control
+
+---
+
+Generate each phase as a complete, implementation-ready output. Include code samples, class signatures, interface definitions, SQL DDL, and configuration snippets wherever they add clarity. Do not produce high-level summaries — produce the actual design artifacts a senior developer can implement directly from.
+
+---
+
+Every addition maps directly back to one of your 43 selected requirements. The prompt is now fully sequenced, self-consistent, and instructs the AI to produce implementation artifacts rather than summaries. When you're ready, paste this into a fresh conversation and it will walk through all 7 phases in order.

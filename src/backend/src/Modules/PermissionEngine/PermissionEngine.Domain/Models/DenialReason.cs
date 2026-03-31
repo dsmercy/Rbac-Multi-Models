@@ -34,4 +34,17 @@ public enum DenialReason
     ScopeNotInherited,
     CrossTenantRejection,
     NoPermissionFound,
+
+    // ── Infrastructure ────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// The permission evaluation pipeline exceeded the 200ms latency budget.
+    /// Treated as a denial to prevent slow-path exploitation.
+    /// </summary>
+    EvaluationTimeout,
+
+    /// <summary>
+    /// Redis was unavailable and the deployment is configured as fail-closed.
+    /// </summary>
+    RedisUnavailable,
 }

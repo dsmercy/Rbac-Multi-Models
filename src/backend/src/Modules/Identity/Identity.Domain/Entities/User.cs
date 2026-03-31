@@ -1,4 +1,5 @@
 using BuildingBlocks.Domain;
+using BuildingBlocks.Domain.Events;
 using Identity.Domain.Events;
 using Identity.Domain.ValueObjects;
 

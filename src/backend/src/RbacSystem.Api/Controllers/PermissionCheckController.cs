@@ -34,6 +34,10 @@ public sealed class PermissionCheckController : ControllerBase
         [FromBody] PermissionCheckRequest request,
         CancellationToken ct)
     {
+        var validationErrors = request.Validate().ToList();
+        if (validationErrors.Count > 0)
+            return BadRequest(new { errors = validationErrors.Select(e => new { field = e.MemberNames.FirstOrDefault(), message = e.ErrorMessage }) });
+
         // Extract the "tv" (token version) claim from the caller's JWT.
         // TokenVersionValidationStep (step 0) compares this against Redis and
         // throws StaleTokenException (→ 401) if the versions differ.
@@ -87,7 +91,18 @@ public sealed record PermissionCheckRequest(
     Guid ResourceId,
     Guid ScopeId,
     IDictionary<string, object>? UserAttributes,
-    IDictionary<string, object>? ResourceAttributes);
+    IDictionary<string, object>? ResourceAttributes)
+{
+    public IEnumerable<System.ComponentModel.DataAnnotations.ValidationResult> Validate()
+    {
+        if (UserId == Guid.Empty)
+            yield return new("UserId must be a non-empty GUID.", new[] { nameof(UserId) });
+        if (string.IsNullOrWhiteSpace(Action))
+            yield return new("Action is required.", new[] { nameof(Action) });
+        if (ResourceId == Guid.Empty)
+            yield return new("ResourceId must be a non-empty GUID.", new[] { nameof(ResourceId) });
+    }
+}
 
 public sealed record PermissionCheckResponse(
     bool IsGranted,

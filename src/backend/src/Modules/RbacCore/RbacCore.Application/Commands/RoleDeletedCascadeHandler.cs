@@ -1,5 +1,5 @@
 using MediatR;
-using RbacCore.Domain.Events;
+using BuildingBlocks.Domain.Events;
 using RbacCore.Domain.Interfaces;
 
 namespace RbacCore.Application.Commands;
