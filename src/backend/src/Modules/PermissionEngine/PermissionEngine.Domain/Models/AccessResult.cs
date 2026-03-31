@@ -1,108 +1,89 @@
 namespace PermissionEngine.Domain.Models;
 
 /// <summary>
-/// Immutable result of a single CanUserAccess evaluation.
-///
-/// Phase-3 additions over the baseline:
-///   EvaluatedPolicies � every policy inspected during this evaluation (name + decision)
-///   EffectiveRoles    � role names that contributed to the final decision
-///
-/// These fields are populated during pipeline execution and serialised into the
-/// Redis cache entry so callers can inspect the reasoning without re-evaluating.
+/// Immutable result returned by CanUserAccess.
+/// Carries the access decision plus all metadata required for structured
+/// audit logging and client-side diagnostics.
 /// </summary>
 public sealed class AccessResult
 {
-    // ?? Core decision ?????????????????????????????????????????????????????????
+    // ── Decision ──────────────────────────────────────────────────────────────
 
-    public bool IsGranted { get; }
-    public DenialReason? Reason { get; }
-    public string? MatchedPolicyId { get; }
-    public DelegationChainInfo? DelegationChain { get; }
-    public bool CacheHit { get; }
-    public long EvaluationLatencyMs { get; }
-    public string? DiagnosticMessage { get; }
-
-    // ?? Phase-3 additions ?????????????????????????????????????????????????????
-
-    /// <summary>Every policy that was examined, with its individual decision.</summary>
-    public IReadOnlyList<EvaluatedPolicy> EvaluatedPolicies { get; }
+    public bool IsGranted { get; private init; }
 
     /// <summary>
-    /// Role names whose permission set was consulted in step 6 of the pipeline.
-    /// Populated only on non-cache-hit evaluations.
+    /// Set when IsGranted = false. Indicates which pipeline step produced
+    /// the denial and why. Used for structured audit logs and metrics labels.
     /// </summary>
-    public IReadOnlyList<string> EffectiveRoles { get; }
+    public DenialReason? Reason { get; private init; }
 
-    // ?? Private constructor ???????????????????????????????????????????????????
+    // ── Diagnostics ───────────────────────────────────────────────────────────
 
-    private AccessResult(
-        bool isGranted,
-        DenialReason? reason,
-        string? matchedPolicyId,
-        DelegationChainInfo? delegationChain,
-        bool cacheHit,
-        long evaluationLatencyMs,
-        string? diagnosticMessage,
-        IReadOnlyList<EvaluatedPolicy>? evaluatedPolicies,
-        IReadOnlyList<string>? effectiveRoles)
-    {
-        IsGranted = isGranted;
-        Reason = reason;
-        MatchedPolicyId = matchedPolicyId;
-        DelegationChain = delegationChain;
-        CacheHit = cacheHit;
-        EvaluationLatencyMs = evaluationLatencyMs;
-        DiagnosticMessage = diagnosticMessage;
-        EvaluatedPolicies = evaluatedPolicies ?? Array.Empty<EvaluatedPolicy>();
-        EffectiveRoles = effectiveRoles ?? Array.Empty<string>();
-    }
+    /// <summary>Whether this result was served from the Redis cache.</summary>
+    public bool CacheHit { get; private init; }
 
-    // ?? Factory methods ???????????????????????????????????????????????????????
+    /// <summary>
+    /// Total wall-clock time from pipeline entry to result production (ms).
+    /// Target: &lt;5ms for cache hits, &lt;50ms for full pipeline evaluation.
+    /// </summary>
+    public long EvaluationLatencyMs { get; private init; }
+
+    /// <summary>
+    /// ID of the policy that produced a DENY, if applicable.
+    /// Null for denials from RBAC or delegation steps.
+    /// </summary>
+    public string? MatchedPolicyId { get; private init; }
+
+    /// <summary>
+    /// Delegation chain metadata when access was granted (or denied) via
+    /// an active delegation. Null for direct role-based access.
+    /// Logged in audit records as ActingOnBehalfOf.
+    /// </summary>
+    public DelegationChainInfo? DelegationChain { get; private init; }
+
+    // ── Private constructor — use factory methods ─────────────────────────────
+
+    private AccessResult() { }
+
+    // ── Factory methods ───────────────────────────────────────────────────────
 
     public static AccessResult Granted(
         bool cacheHit,
         long latencyMs,
-        DelegationChainInfo? delegationChain = null,
-        string? matchedPolicyId = null,
-        IReadOnlyList<EvaluatedPolicy>? evaluatedPolicies = null,
-        IReadOnlyList<string>? effectiveRoles = null)
-        => new(
-            true, null, matchedPolicyId, delegationChain,
-            cacheHit, latencyMs, null,
-            evaluatedPolicies, effectiveRoles);
+        DelegationChainInfo? delegationChain = null)
+        => new()
+        {
+            IsGranted = true,
+            CacheHit = cacheHit,
+            EvaluationLatencyMs = latencyMs,
+            DelegationChain = delegationChain
+        };
 
+    /// <summary>
+    /// Constructs a Denied result from full pipeline evaluation.
+    /// </summary>
     public static AccessResult Denied(
         DenialReason reason,
         long latencyMs,
-        string? diagnosticMessage = null,
-        string? matchedPolicyId = null,
-        IReadOnlyList<EvaluatedPolicy>? evaluatedPolicies = null,
-        IReadOnlyList<string>? effectiveRoles = null)
-        => new(
-            false, reason, matchedPolicyId, null,
-            false, latencyMs, diagnosticMessage,
-            evaluatedPolicies, effectiveRoles);
+        string? message = null,
+        string? matchedPolicyId = null)
+        => new()
+        {
+            IsGranted = false,
+            Reason = reason,
+            EvaluationLatencyMs = latencyMs,
+            MatchedPolicyId = matchedPolicyId
+        };
 
-    /// <summary>Used when returning a previously cached denied result.</summary>
+    /// <summary>
+    /// Constructs a Denied result from a cached entry — no latency to report.
+    /// </summary>
     public static AccessResult DeniedFromCache(DenialReason reason)
-        => new(false, reason, null, null, true, 0, null, null, null);
-
-    /// <summary>Used when returning a previously cached granted result.</summary>
-    public static AccessResult GrantedFromCache(DelegationChainInfo? delegationChain = null)
-        => new(true, null, null, delegationChain, true, 0, null, null, null);
-}
-
-// ?? Supporting types ??????????????????????????????????????????????????????????
-
-/// <summary>A single policy's contribution to the evaluation.</summary>
-public sealed record EvaluatedPolicy(
-    string PolicyId,
-    string PolicyName,
-    PolicyOutcome Outcome);
-
-public enum PolicyOutcome
-{
-    NotApplicable,
-    Allow,
-    Deny
+        => new()
+        {
+            IsGranted = false,
+            Reason = reason,
+            CacheHit = true,
+            EvaluationLatencyMs = 0
+        };
 }

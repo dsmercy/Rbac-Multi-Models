@@ -1,10 +1,34 @@
+using BuildingBlocks.Application;
 using BuildingBlocks.Domain;
 using FluentValidation;
+using MediatR;
+using Microsoft.IdentityModel.Tokens;
+using PermissionEngine.Domain.Exceptions;
 using System.Net;
 using System.Text.Json;
 
 namespace RbacSystem.Api.Middleware;
 
+/// <summary>
+/// Central exception handler implementing Phase 4 failure-handling spec.
+///
+/// Failure mode mapping:
+///   ValidationException          → 400 Bad Request      (VALIDATION_ERROR)
+///   DomainException              → 422 Unprocessable    (domain code)
+///   UnauthorizedAccessException  → 403 Forbidden        (FORBIDDEN)
+///   SecurityTokenException       → 401 Unauthorized     (TOKEN_INVALID)
+///   StaleTokenException          → 401 Unauthorized     (TOKEN_STALE)
+///   KeyNotFoundException         → 404 Not Found        (NOT_FOUND)
+///   InvalidOperationException    → 400 Bad Request      (INVALID_OPERATION)
+///   TimeoutException             → 503 Service Unavail. (EVAL_TIMEOUT)
+///   DbUnavailableException       → 503 Service Unavail. (SERVICE_UNAVAILABLE)
+///   unhandled                    → 500 Internal Error   (INTERNAL_ERROR)
+///
+/// Security notes:
+///   • Stack traces are NEVER included in responses (OWASP A05).
+///   • Raw JWT values are NEVER logged.
+///   • IP and User-Agent are logged on 401 events for threat detection.
+/// </summary>
 public sealed class GlobalExceptionMiddleware
 {
     private readonly RequestDelegate _next;
@@ -32,47 +56,45 @@ public sealed class GlobalExceptionMiddleware
 
     private async Task HandleExceptionAsync(HttpContext context, Exception exception)
     {
-        _logger.LogError(exception,
-            "Unhandled exception for {Method} {Path}",
-            context.Request.Method,
-            context.Request.Path);
+        var (statusCode, code, message) = MapException(exception);
 
-        var (statusCode, code, message) = exception switch
+        // Log 401 events with IP + UA for security monitoring
+        if (statusCode == HttpStatusCode.Unauthorized)
         {
-            ValidationException ve => (
-                HttpStatusCode.BadRequest,
-                "VALIDATION_ERROR",
-                string.Join("; ", ve.Errors.Select(e => e.ErrorMessage))),
+            _logger.LogWarning(
+                "Authentication failure [{Code}] for {Method} {Path} | IP={Ip} UA={UA}",
+                code,
+                context.Request.Method,
+                context.Request.Path,
+                context.Connection.RemoteIpAddress,
+                context.Request.Headers.UserAgent.ToString());
+        }
+        else if (statusCode == HttpStatusCode.InternalServerError)
+        {
+            _logger.LogError(exception,
+                "Unhandled exception [{Code}] for {Method} {Path}",
+                code,
+                context.Request.Method,
+                context.Request.Path);
+        }
+        else
+        {
+            _logger.LogWarning(
+                "Request error [{Code}] {Message} for {Method} {Path}",
+                code, message,
+                context.Request.Method,
+                context.Request.Path);
+        }
 
-            DomainException de => (
-                HttpStatusCode.UnprocessableEntity,
-                de.Code,
-                de.Message),
-
-            KeyNotFoundException => (
-                HttpStatusCode.NotFound,
-                "NOT_FOUND",
-                "The requested resource was not found."),
-
-            UnauthorizedAccessException => (
-                HttpStatusCode.Forbidden,
-                "FORBIDDEN",
-                "You do not have permission to perform this action."),
-
-            InvalidOperationException ioe => (
-                HttpStatusCode.BadRequest,
-                "INVALID_OPERATION",
-                ioe.Message),
-
-            _ => (
-                HttpStatusCode.InternalServerError,
-                "INTERNAL_ERROR",
-                "An unexpected error occurred.")
-        };
+        // Gap 2 fix: stale token → revoke refresh tokens so re-login is forced.
+        // Publish asynchronously; failure to revoke must not prevent the 401 response.
+        if (exception is StaleTokenException)
+            await TryPublishStaleTokenDetectedAsync(context);
 
         context.Response.StatusCode = (int)statusCode;
         context.Response.ContentType = "application/json";
 
+        // Never include stack trace in response (OWASP A05)
         var body = JsonSerializer.Serialize(new
         {
             code,
@@ -81,5 +103,104 @@ public sealed class GlobalExceptionMiddleware
         });
 
         await context.Response.WriteAsync(body);
+    }
+
+    private static (HttpStatusCode status, string code, string message) MapException(
+        Exception exception) => exception switch
+    {
+        // ── 400 Bad Request ───────────────────────────────────────────────────
+        ValidationException ve => (
+            HttpStatusCode.BadRequest,
+            "VALIDATION_ERROR",
+            string.Join("; ", ve.Errors.Select(e => e.ErrorMessage))),
+
+        InvalidOperationException ioe => (
+            HttpStatusCode.BadRequest,
+            "INVALID_OPERATION",
+            ioe.Message),
+
+        // ── 401 Unauthorized ──────────────────────────────────────────────────
+        // Stale token version — role or delegation changed after token was issued.
+        // Refresh tokens are revoked via StaleTokenDetectedNotification (MediatR).
+        StaleTokenException => (
+            HttpStatusCode.Unauthorized,
+            "TOKEN_STALE",
+            "Your session token is outdated due to a permission change. Please re-authenticate."),
+
+        // Corrupt or malformed JWT — log IP + UA handled by the 401 log block above.
+        SecurityTokenException => (
+            HttpStatusCode.Unauthorized,
+            "TOKEN_INVALID",
+            "The provided token is invalid or malformed. Please re-authenticate."),
+
+        // ── 403 Forbidden ─────────────────────────────────────────────────────
+        UnauthorizedAccessException => (
+            HttpStatusCode.Forbidden,
+            "FORBIDDEN",
+            "You do not have permission to perform this action."),
+
+        // ── 404 Not Found ─────────────────────────────────────────────────────
+        KeyNotFoundException => (
+            HttpStatusCode.NotFound,
+            "NOT_FOUND",
+            "The requested resource was not found."),
+
+        // ── 422 Unprocessable Entity ──────────────────────────────────────────
+        DomainException de => (
+            HttpStatusCode.UnprocessableEntity,
+            de.Code,
+            de.Message),
+
+        // ── 503 Service Unavailable ───────────────────────────────────────────
+        // Distinguish infrastructure failure from permission denial (spec requirement:
+        // "DB unavailable → 503, not 403 — caller must distinguish infra from denial")
+        DbUnavailableException => (
+            HttpStatusCode.ServiceUnavailable,
+            "SERVICE_UNAVAILABLE",
+            "A required service is temporarily unavailable. Please retry."),
+
+        TimeoutException => (
+            HttpStatusCode.ServiceUnavailable,
+            "EVAL_TIMEOUT",
+            "Permission evaluation timed out. Please retry."),
+
+        // ── 500 Internal Server Error ─────────────────────────────────────────
+        _ => (
+            HttpStatusCode.InternalServerError,
+            "INTERNAL_ERROR",
+            "An unexpected error occurred.")
+    };
+
+    /// <summary>
+    /// Publishes <see cref="StaleTokenDetectedNotification"/> so Identity module can
+    /// revoke all active refresh tokens, forcing a full re-login.
+    /// Extracts userId and tenantId from the already-authenticated JWT claims.
+    /// Swallows exceptions — revocation failure must not mask the 401 response.
+    /// </summary>
+    private async Task TryPublishStaleTokenDetectedAsync(HttpContext context)
+    {
+        try
+        {
+            var subClaim = context.User.FindFirst("sub")?.Value
+                        ?? context.User.FindFirst(
+                               System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+            var tidClaim = context.User.FindFirst("tid")?.Value;
+
+            if (!Guid.TryParse(subClaim, out var userId) ||
+                !Guid.TryParse(tidClaim, out var tenantId))
+                return; // Claims unavailable (e.g. unauthenticated request) — skip
+
+            var publisher = context.RequestServices.GetService<IPublisher>();
+            if (publisher is null) return;
+
+            await publisher.Publish(
+                new StaleTokenDetectedNotification(userId, tenantId),
+                context.RequestAborted);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex,
+                "Failed to publish StaleTokenDetectedNotification — refresh tokens may not be revoked");
+        }
     }
 }

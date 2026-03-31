@@ -7,7 +7,7 @@ using Identity.Infrastructure.Services;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
-using IdentityService = Identity.Application.Services.IdentityService;
+using IdentityService = Identity.Infrastructure.Services.IdentityService;
 
 namespace Identity.Infrastructure;
 
@@ -22,8 +22,7 @@ public static class IdentityModuleExtensions
                 configuration.GetConnectionString("Identity"),
                 npgsql => npgsql.MigrationsHistoryTable("__ef_migrations_identity", "identity")));
 
-        services.Configure<JwtSettings>(
-            configuration.GetSection("Jwt"));
+        services.Configure<JwtSettings>(configuration.GetSection("Jwt"));
 
         // Repositories
         services.AddScoped<IUserRepository, UserRepository>();
@@ -35,7 +34,18 @@ public static class IdentityModuleExtensions
         services.AddScoped<ITokenService, JwtTokenService>();
         services.AddScoped<IIdentityService, IdentityService>();
 
-        // MediatR handlers from this assembly
+        // IUserRoleProvider is registered in Program.cs AFTER this module
+        // because UserRoleProvider queries the RbacCore schema via Dapper.
+        // This ordering avoids a project reference from Identity.Infrastructure
+        // to RbacCore.Infrastructure.
+        //
+        // ITokenVersionService is provided by PermissionEngineModuleExtensions
+        // (registered as RedisPermissionCacheService implementing both interfaces).
+        // PermissionEngineModule must be registered before IdentityModule so the
+        // ITokenVersionService registration is available when LoginCommandHandler
+        // is resolved. Program.cs enforces this ordering.
+
+        // MediatR handlers for this module
         services.AddMediatR(cfg =>
             cfg.RegisterServicesFromAssembly(
                 typeof(Application.Commands.CreateUserCommand).Assembly));

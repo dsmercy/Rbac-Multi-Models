@@ -1,5 +1,6 @@
 using AuditLogging.Application.Services;
 using PermissionEngine.Application.Pipeline;
+using PermissionEngine.Domain.Exceptions;
 using PermissionEngine.Domain.Interfaces;
 using PermissionEngine.Domain.Models;
 using System.Diagnostics;
@@ -42,6 +43,20 @@ public sealed class PermissionEngineService : IPermissionEngine
                 $"Tenant {context.TenantId} is suspended.");
             await RecordDecisionAsync(userId, action, resourceId, scopeId, context, denied, ct);
             return denied;
+        }
+
+        // ── Token version check (must run BEFORE cache lookup) ───────────────
+        // The cache may contain a valid entry written by a fresh token at version N.
+        // A caller with a stale JWT (tv < N) would otherwise get a cache hit and bypass
+        // StaleTokenException entirely. Checking here ensures every request validates
+        // its JWT tv claim regardless of cache state.
+        if (context.TokenVersion is not null)
+        {
+            var currentVersion = await _cache.GetTokenVersionAsync(userId, ct);
+            if (context.TokenVersion.Value != currentVersion)
+                throw new StaleTokenException(
+                    $"Token version {context.TokenVersion.Value} is stale. " +
+                    $"Current version is {currentVersion}. Please re-authenticate.");
         }
 
         // Cache lookup

@@ -25,6 +25,7 @@ using RbacCore.Application.Common;
 using RbacCore.Application.Services;
 using TenantManagement.Application.Common;
 using TenantManagement.Application.Services;
+using TenantManagement.Domain.ValueObjects;
 
 namespace PermissionEngine.Tests;
 
@@ -84,14 +85,14 @@ public sealed class ContextBuilder
     public ContextBuilder WithEnvAttr(string k, object v)  { _envAttrs[k]  = v; return this; }
     public ContextBuilder WithResAttr(string k, object v)  { _resAttrs[k]  = v; return this; }
 
-    public EvaluationContext Build() => new(
-        tenantId:              _tenantId,
-        correlationId:         Guid.NewGuid(),
-        tokenVersion:          _tokenVersion,
-        isSuperAdmin:          _superAdmin,
-        userAttributes:        _userAttrs,
-        resourceAttributes:    _resAttrs,
-        environmentAttributes: _envAttrs);
+    public EvaluationContext Build() => new EvaluationContext(
+    tenantId: _tenantId,
+    correlationId: Guid.NewGuid(),
+    userAttributes: _userAttrs,
+    resourceAttributes: _resAttrs,
+    environmentAttributes: _envAttrs,
+    tokenVersion: _tokenVersion);
+
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

@@ -33,17 +33,42 @@ builder.Services
     .AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     .AddJwtBearer(options =>
     {
+        // Disable claim type mapping so JWT claim names are preserved as-is in
+        // ClaimsPrincipal (e.g. "tid", "tv", "sub" are not remapped to XML schema URNs).
+        options.MapInboundClaims = false;
+
         options.TokenValidationParameters = new TokenValidationParameters
         {
-            ValidateIssuer = true,
-            ValidateAudience = true,
-            ValidateLifetime = true,
+            ValidateIssuer           = true,
+            ValidateAudience         = true,
+            ValidateLifetime         = true,
             ValidateIssuerSigningKey = true,
-            ValidIssuer = builder.Configuration["Jwt:Issuer"],
-            ValidAudience = builder.Configuration["Jwt:Audience"],
-            IssuerSigningKey = new SymmetricSecurityKey(
+            ValidIssuer              = builder.Configuration["Jwt:Issuer"],
+            ValidAudience            = builder.Configuration["Jwt:Audience"],
+            IssuerSigningKey         = new SymmetricSecurityKey(
                 Encoding.UTF8.GetBytes(builder.Configuration["Jwt:SigningKey"]!)),
-            ClockSkew = TimeSpan.FromSeconds(30)
+            ClockSkew  = TimeSpan.FromSeconds(30),
+            // With MapInboundClaims = false, role and name claims keep their JWT names.
+            RoleClaimType = "roles",
+            NameClaimType = "sub"
+        };
+
+        // Log malformed / corrupt JWT events (OWASP A07)
+        options.Events = new JwtBearerEvents
+        {
+            OnAuthenticationFailed = ctx =>
+            {
+                var logger = ctx.HttpContext.RequestServices
+                    .GetRequiredService<ILogger<Program>>();
+
+                logger.LogWarning(
+                    "JWT authentication failed: {Error} | IP={Ip} UA={UA}",
+                    ctx.Exception.GetType().Name,
+                    ctx.HttpContext.Connection.RemoteIpAddress,
+                    ctx.HttpContext.Request.Headers.UserAgent.ToString());
+
+                return Task.CompletedTask;
+            }
         };
     });
 
@@ -62,17 +87,20 @@ builder.Services.AddMediatR(cfg =>
 });
 
 // ── Module registrations ──────────────────────────────────────────────────────
+// Note: PermissionEngineModule must be registered BEFORE IdentityModule because
+// it registers ITokenVersionService (used by LoginCommandHandler).
 builder.Services
+    .AddPermissionEngineModule(builder.Configuration) // registers ITokenVersionService
     .AddIdentityModule(builder.Configuration)
     .AddTenantManagementModule(builder.Configuration)
     .AddRbacCoreModule(builder.Configuration)
-    .AddPermissionEngineModule(builder.Configuration)
     .AddPolicyEngineModule(builder.Configuration)
     .AddDelegationModule(builder.Configuration)
     .AddAuditLoggingModule(builder.Configuration);
 
+// IUserRoleProvider: Dapper-based; registered after IdentityModule so it can
+// override the placeholder registration if any exists.
 builder.Services.AddScoped<IUserRoleProvider, UserRoleProvider>();
-
 
 // ── API ───────────────────────────────────────────────────────────────────────
 builder.Services.AddControllers();
@@ -82,46 +110,57 @@ builder.Services.AddSwaggerGen(c =>
     c.SwaggerDoc("v1", new() { Title = "RBAC System API", Version = "v1" });
     c.AddSecurityDefinition("Bearer", new Microsoft.OpenApi.Models.OpenApiSecurityScheme
     {
-        Name = "Authorization",
-        Type = Microsoft.OpenApi.Models.SecuritySchemeType.Http,
-        Scheme = "bearer",
-        BearerFormat = "JWT"
+        Name        = "Authorization",
+        Type        = Microsoft.OpenApi.Models.SecuritySchemeType.Http,
+        Scheme      = "bearer",
+        BearerFormat = "JWT",
+        Description = "Enter the JWT token. The 'tv' claim is used for token-version validation."
+    });
+    c.AddSecurityRequirement(new Microsoft.OpenApi.Models.OpenApiSecurityRequirement
+    {
+        {
+            new Microsoft.OpenApi.Models.OpenApiSecurityScheme
+            {
+                Reference = new Microsoft.OpenApi.Models.OpenApiReference
+                {
+                    Type = Microsoft.OpenApi.Models.ReferenceType.SecurityScheme,
+                    Id   = "Bearer"
+                }
+            },
+            Array.Empty<string>()
+        }
     });
 });
 
-// ── Seed data (development only) ────────────────
+// ── Seed data (development only) ──────────────────────────────────────────────
 builder.Services.AddTransient<DataSeeder>();
-
-// ── Rate limiting ─────────────────────────────────────────────────────────────
-//builder.Services.AddRateLimiter(options =>
-//{
-//    options.AddFixedWindowLimiter("per-user", cfg =>
-//    {
-//        cfg.PermitLimit = 300;
-//        cfg.Window = TimeSpan.FromMinutes(1);
-//    });
-//});
 
 var app = builder.Build();
 
 // ── Middleware pipeline ───────────────────────────────────────────────────────
+// GlobalExceptionMiddleware must be first to catch all downstream exceptions,
+// including StaleTokenException (→ 401) from TokenVersionValidationStep.
 app.UseMiddleware<GlobalExceptionMiddleware>();
 
 app.UseHttpsRedirection();
 
-// Security headers
+// Security headers (OWASP hardening)
 app.Use(async (ctx, next) =>
 {
-    ctx.Response.Headers["X-Content-Type-Options"] = "nosniff";
-    ctx.Response.Headers["X-Frame-Options"] = "DENY";
-    ctx.Response.Headers["Strict-Transport-Security"] = "max-age=63072000; includeSubDomains";
-    ctx.Response.Headers["X-XSS-Protection"] = "0";
+    ctx.Response.Headers["X-Content-Type-Options"]    = "nosniff";
+    ctx.Response.Headers["X-Frame-Options"]            = "DENY";
+    ctx.Response.Headers["Strict-Transport-Security"]  = "max-age=63072000; includeSubDomains";
+    ctx.Response.Headers["X-XSS-Protection"]           = "0";
+    ctx.Response.Headers["Referrer-Policy"]            = "no-referrer";
+    ctx.Response.Headers["Permissions-Policy"]         = "geolocation=(), microphone=()";
     await next();
 });
 
-//app.UseRateLimiter();
 app.UseAuthentication();
 app.UseAuthorization();
+
+// TenantValidationMiddleware runs AFTER auth so the JWT is already validated.
+// It compares the {tid} route parameter against the JWT "tid" claim.
 app.UseMiddleware<TenantValidationMiddleware>();
 
 if (app.Environment.IsDevelopment())

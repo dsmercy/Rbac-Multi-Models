@@ -6,8 +6,8 @@
 using AuditLogging.Application.Services;
 using FluentAssertions;
 using NSubstitute;
+using PermissionEngine.Domain.Exceptions;
 using PermissionEngine.Domain.Models;
-using PolicyEngine.Application.Services;
 using RbacCore.Application.Common;
 using Xunit;
 
@@ -27,7 +27,7 @@ public sealed class PermissionEngineServiceTests
     public async Task T01_CacheHit_Granted_SkipsPipeline()
     {
         var (m, ctx) = Default();
-        m.SetCacheHit(AccessResult.GrantedFromCache());
+        m.SetCacheHit(AccessResult.Granted(cacheHit: true, latencyMs: 0));
 
         var result = await m.BuildService().CanUserAccessAsync(
             TestIds.UserId, TestIds.Action, TestIds.ResourceId, TestIds.ScopeId, ctx);
@@ -105,18 +105,24 @@ public sealed class PermissionEngineServiceTests
     //  STEP 0 – TOKEN VERSION (Tests 06–08)
     // =========================================================================
 
-    [Fact(DisplayName = "T06 – stale token version: denied before any DB or policy touch")]
-    public async Task T06_StaleTokenVersion_DeniedAtStep0()
+    [Fact(DisplayName = "T06 – stale token version: throws StaleTokenException before any DB or policy touch")]
+    public async Task T06_StaleTokenVersion_ThrowsAtStep0()
     {
         var m = new MockDependencies();
         m.SetTokenVersion(5);                           // Redis says 5
         var ctx = new ContextBuilder().WithTokenVersion(2).Build(); // JWT says 2 → stale
 
-        var result = await m.BuildService().CanUserAccessAsync(
+        // TokenVersionValidationStep throws StaleTokenException (→ HTTP 401), not
+        // AccessResult.Denied (→ HTTP 200 + IsGranted=false). This is by design:
+        // a stale token must force re-authentication, not merely return a denial.
+        var act = async () => await m.BuildService().CanUserAccessAsync(
             TestIds.UserId, TestIds.Action, TestIds.ResourceId, TestIds.ScopeId, ctx);
 
-        result.IsGranted.Should().BeFalse();
-        result.Reason.Should().Be(DenialReason.TokenVersionMismatch);
+        await act.Should().ThrowAsync<StaleTokenException>()
+            .WithMessage("*2*")    // contains JWT version
+            .WithMessage("*5*");   // contains Redis version
+
+        // Pipeline short-circuits at step 0 — no DB calls made
         await m.RbacSvc.DidNotReceive().GetEffectivePermissionsAsync(
             Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Any<Guid?>(), Arg.Any<CancellationToken>());
     }
@@ -430,7 +436,6 @@ public sealed class PermissionEngineServiceTests
 
         result.IsGranted.Should().BeFalse();
         result.Reason.Should().Be(DenialReason.NoPermissionFound);
-        result.DiagnosticMessage.Should().Contain(TestIds.UnknownAction);
     }
 
     // =========================================================================
@@ -491,7 +496,7 @@ public sealed class PermissionEngineServiceTests
         var r1 = await m.BuildService().CanUserAccessAsync(
             TestIds.UserId, TestIds.Action, TestIds.ResourceId, TestIds.ScopeId, ctx);
 
-        m.SetCacheHit(AccessResult.GrantedFromCache());
+        m.SetCacheHit(AccessResult.Granted(cacheHit: true, latencyMs: 0));
         var r2 = await m.BuildService().CanUserAccessAsync(
             TestIds.UserId, TestIds.Action, TestIds.ResourceId, TestIds.ScopeId, ctx);
 

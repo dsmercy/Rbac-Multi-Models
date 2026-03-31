@@ -28,6 +28,8 @@
     <ProjectReference Include="..\..\src\BuildingBlocks\BuildingBlocks.Domain\BuildingBlocks.Domain.csproj" />
     <ProjectReference Include="..\..\src\BuildingBlocks\BuildingBlocks.Application\BuildingBlocks.Application.csproj" />
     <ProjectReference Include="..\..\src\Modules\Identity\Identity.Domain\Identity.Domain.csproj" />
+    <ProjectReference Include="..\..\src\Modules\Identity\Identity.Infrastructure\Identity.Infrastructure.csproj" />
+    <ProjectReference Include="..\..\src\Modules\PermissionEngine\PermissionEngine.Infrastructure\PermissionEngine.Infrastructure.csproj" />
     <ProjectReference Include="..\..\src\Modules\TenantManagement\TenantManagement.Application\TenantManagement.Application.csproj" />
     <ProjectReference Include="..\..\src\Modules\RbacCore\RbacCore.Domain\RbacCore.Domain.csproj" />
     <ProjectReference Include="..\..\src\Modules\RbacCore\RbacCore.Application\RbacCore.Application.csproj" />
@@ -37,6 +39,7 @@
     <ProjectReference Include="..\..\src\Modules\Delegation\Delegation.Domain\Delegation.Domain.csproj" />
     <ProjectReference Include="..\..\src\Modules\Delegation\Delegation.Application\Delegation.Application.csproj" />
     <ProjectReference Include="..\..\src\Modules\AuditLogging\AuditLogging.Application\AuditLogging.Application.csproj" />
+    <ProjectReference Include="..\..\src\RbacSystem.Api\RbacSystem.Api.csproj" />
   </ItemGroup>
 
 </Project>

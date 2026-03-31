@@ -27,4 +27,8 @@
     <!-- Microsoft.AspNetCore.RateLimiting is part of Microsoft.AspNetCore.App in .NET 8 — no NuGet reference needed -->
   </ItemGroup>
 
+  <ItemGroup>
+    <Folder Include="Infrastructure\" />
+  </ItemGroup>
+
 </Project>

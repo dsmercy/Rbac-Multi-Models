@@ -1,0 +1,13 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(cd /c/Daya/DotNet/AI Projects/RBAC-multi-models/src/backend/src)",
+      "Bash(dotnet build:*)",
+      "Bash(dotnet test:*)",
+      "Bash(find /c/Daya/DotNet/\"AI Projects\"/RBAC-multi-models/src/backend/src -name \"*Utility\\\\|*Helper\\\\|*Utils\\\\|*Extensions\" -type f)",
+      "Bash(docker ps:*)",
+      "Bash(docker info:*)",
+      "Bash(docker compose:*)"
+    ]
+  }
+}

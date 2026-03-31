@@ -1,4 +1,3 @@
-using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using PermissionEngine.Domain.Interfaces;
@@ -7,6 +6,18 @@ using System.Security.Claims;
 
 namespace RbacSystem.Api.Controllers;
 
+/// <summary>
+/// Exposes the permission evaluation engine as an HTTP endpoint.
+///
+/// Phase 4 additions:
+///   • Extracts the "tv" (token version) claim from the caller's JWT and
+///     passes it into EvaluationContext so TokenVersionValidationStep (step 0)
+///     can detect stale tokens.
+///   • If the token version is stale, TokenVersionValidationStep throws
+///     StaleTokenException → GlobalExceptionMiddleware → 401.
+///   • Environment attributes (time_utc, date_utc, ip) are populated here
+///     for ABAC policy evaluation.
+/// </summary>
 [ApiController]
 [Route("api/v1/tenants/{tid:guid}/permissions")]
 [Authorize]
@@ -23,14 +34,26 @@ public sealed class PermissionCheckController : ControllerBase
         [FromBody] PermissionCheckRequest request,
         CancellationToken ct)
     {
+        // Extract the "tv" (token version) claim from the caller's JWT.
+        // TokenVersionValidationStep (step 0) compares this against Redis and
+        // throws StaleTokenException (→ 401) if the versions differ.
+        var tokenVersionClaim = User.FindFirst("tv")?.Value;
+        int? tokenVersion = tokenVersionClaim is not null
+            && int.TryParse(tokenVersionClaim, out var tv)
+            ? tv
+            : null;
+
+        var correlationId = HttpContext.TraceIdentifier is { Length: > 0 } traceId
+            ? Guid.TryParse(traceId, out var parsed) ? parsed : Guid.NewGuid()
+            : Guid.NewGuid();
+
         var context = new EvaluationContext(
             tenantId: tid,
-            correlationId: HttpContext.TraceIdentifier.GetHashCode() is var h
-                ? Guid.NewGuid()
-                : Guid.NewGuid(),
+            correlationId: correlationId,
             userAttributes: request.UserAttributes ?? new Dictionary<string, object>(),
             resourceAttributes: request.ResourceAttributes ?? new Dictionary<string, object>(),
-            environmentAttributes: BuildEnvironmentAttributes());
+            environmentAttributes: BuildEnvironmentAttributes(),
+            tokenVersion: tokenVersion);
 
         var result = await _permissionEngine.CanUserAccessAsync(
             request.UserId,
@@ -54,7 +77,7 @@ public sealed class PermissionCheckController : ControllerBase
     {
         ["time_utc"] = DateTimeOffset.UtcNow.ToString("HH:mm"),
         ["date_utc"] = DateTimeOffset.UtcNow.ToString("yyyy-MM-dd"),
-        ["ip"] = HttpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown"
+        ["ip"]       = HttpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown"
     };
 }
 

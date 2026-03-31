@@ -1,76 +1,68 @@
 namespace PermissionEngine.Domain.Models;
 
 /// <summary>
-/// Carries all ambient data required for a single CanUserAccess evaluation.
+/// Carries all per-request contextual data through the 8-step permission
+/// evaluation pipeline.
 ///
-/// Phase-3 additions:
-///   TokenVersion — the "tv" claim from the caller's JWT; validated against
-///                  Redis before evaluation begins (Step 0). Null = skip check.
-///   IsSuperAdmin — when true the pipeline skips tenant isolation checks;
-///                  used exclusively for platform-level operations.
+/// Immutable after construction except for mutable attribute dictionaries
+/// (which are populated before the first pipeline step runs).
+///
+/// TokenVersion:
+///   The "tv" claim extracted from the caller's JWT.
+///   Null for server-to-server calls that do not carry a user JWT â€”
+///   TokenVersionValidationStep skips validation when this is null.
 /// </summary>
 public sealed class EvaluationContext
 {
-    public Guid TenantId { get; init; }
-    public Guid CorrelationId { get; init; }
-    public DelegationChainInfo? DelegationChain { get; init; }
-
-    // ?? JWT token metadata ????????????????????????????????????????????????????
+    /// <summary>The tenant this evaluation belongs to.</summary>
+    public Guid TenantId { get; }
 
     /// <summary>
-    /// Token version embedded in the JWT ("tv" claim). The pipeline compares
-    /// this against the current Redis value for the user. Null = no check.
+    /// Distributed tracing correlation ID â€” propagated from the incoming
+    /// HTTP request's traceparent / X-Correlation-ID header.
     /// </summary>
-    public int? TokenVersion { get; init; }
+    public Guid CorrelationId { get; }
 
     /// <summary>
-    /// True for tokens issued to the platform super-admin account.
-    /// Bypasses tenant isolation but is still fully audited.
+    /// Attributes about the calling user (e.g. department, clearance level).
+    /// Keys use dot notation: "user.department", "user.clearance".
     /// </summary>
-    public bool IsSuperAdmin { get; init; }
+    public IDictionary<string, object> UserAttributes { get; }
 
-    // ?? ABAC attribute bags ???????????????????????????????????????????????????
+    /// <summary>
+    /// Attributes about the target resource (e.g. classification, owner).
+    /// Keys: "resource.classification", "resource.owner_id".
+    /// </summary>
+    public IDictionary<string, object> ResourceAttributes { get; }
 
-    public IReadOnlyDictionary<string, object> UserAttributes { get; init; }
-        = new Dictionary<string, object>();
+    /// <summary>
+    /// Attributes about the environment (e.g. request time, IP, region).
+    /// Keys: "env.time_utc", "env.ip", "env.date_utc".
+    /// Populated by the API layer from HttpContext before pipeline entry.
+    /// </summary>
+    public IDictionary<string, object> EnvironmentAttributes { get; }
 
-    public IReadOnlyDictionary<string, object> ResourceAttributes { get; init; }
-        = new Dictionary<string, object>();
-
-    public IReadOnlyDictionary<string, object> EnvironmentAttributes { get; init; }
-        = new Dictionary<string, object>();
-
-    // ?? Constructors ??????????????????????????????????????????????????????????
-
-    /// <summary>Default constructor — required for object-initializer usage.</summary>
-    public EvaluationContext() { }
+    /// <summary>
+    /// Token version embedded in the caller's JWT as the "tv" claim.
+    /// Null for server-to-server calls that bypass JWT validation.
+    /// Used by TokenVersionValidationStep (pipeline step 0) to detect
+    /// stale tokens after role/delegation changes.
+    /// </summary>
+    public int? TokenVersion { get; }
 
     public EvaluationContext(
         Guid tenantId,
         Guid correlationId,
-        DelegationChainInfo? delegationChain = null,
-        int? tokenVersion = null,
-        bool isSuperAdmin = false,
         IDictionary<string, object>? userAttributes = null,
         IDictionary<string, object>? resourceAttributes = null,
-        IDictionary<string, object>? environmentAttributes = null)
+        IDictionary<string, object>? environmentAttributes = null,
+        int? tokenVersion = null)
     {
         TenantId = tenantId;
         CorrelationId = correlationId;
-        DelegationChain = delegationChain;
+        UserAttributes = userAttributes ?? new Dictionary<string, object>();
+        ResourceAttributes = resourceAttributes ?? new Dictionary<string, object>();
+        EnvironmentAttributes = environmentAttributes ?? new Dictionary<string, object>();
         TokenVersion = tokenVersion;
-        IsSuperAdmin = isSuperAdmin;
-
-        UserAttributes = userAttributes is not null
-            ? new Dictionary<string, object>(userAttributes)
-            : new Dictionary<string, object>();
-
-        ResourceAttributes = resourceAttributes is not null
-            ? new Dictionary<string, object>(resourceAttributes)
-            : new Dictionary<string, object>();
-
-        EnvironmentAttributes = environmentAttributes is not null
-            ? new Dictionary<string, object>(environmentAttributes)
-            : new Dictionary<string, object>();
     }
 }
