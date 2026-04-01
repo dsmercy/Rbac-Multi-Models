@@ -53,7 +53,7 @@ public sealed class AuthController : ControllerBase
     /// <response code="200">Session valid — returns current user profile.</response>
     /// <response code="401">No valid Bearer token.</response>
     /// <response code="404">User record not found (deleted after token was issued).</response>
-    [HttpGet("me")]
+    [HttpGet("currentuser")]
     [Authorize]
     [ProducesResponseType(typeof(MeResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]

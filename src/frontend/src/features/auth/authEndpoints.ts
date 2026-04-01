@@ -25,7 +25,7 @@ export const authEndpoints = apiSlice.injectEndpoints({
      * A 401 means no valid session — AuthGuard will redirect to login.
      */
     getMe: builder.query<UserProfile, void>({
-      query: () => '/auth/me',
+      query: () => '/auth/currentuser',
       providesTags: ['Auth'] as never,
     }),
   }),
