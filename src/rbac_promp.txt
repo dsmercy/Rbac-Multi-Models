@@ -1,9 +1,5 @@
 
-You are a senior software architect and security expert with deep experience in building enterprise IAM systems similar to Microsoft Azure RBAC and AWS IAM.
-
-I am a senior full-stack developer building a **production-grade Modular Monolith RBAC system using Clean Architecture**, with the goal to later evolve it into microservices.
-
-Your task is to generate a **complete, implementation-ready system design, architecture, and development plan**, structured across the 7 phases defined below. Each phase must be completed in sequence before proceeding to the next — do not skip ahead or merge phases.
+Your task is to generate a **complete, implementation-ready system design, architecture, and development plan**, structured across the 8 phases defined below. Each phase must be completed in sequence before proceeding to the next — do not skip ahead or merge phases.
 
 ---
 
@@ -292,29 +288,7 @@ Provide request/response examples for all of the following:
 
 ---
 
-# 🔁 Phase 7 — Frontend, Observability & Infrastructure
-
-## Admin Panel (React + TypeScript)
-
-### Component Breakdown
-
-Deliver a full component tree for the following views:
-
-* **Role Editor** — create/edit role, assign permissions via checkbox matrix, scope selector
-* **Permission Matrix View** — read-only grid: roles (columns) × permissions (rows), with scope filter
-* **User-Role Assignment** — user search, role multi-select, scope picker, effective-date + expiry-date
-* **Policy Builder UI** — visual JSON condition tree composer (add condition node, choose operator, set attribute + value), preview rendered policy JSON, test policy against a sample context
-* **Delegation Manager** — create delegation (select delegatee, permissions subset, date range), list active delegations, revoke button with confirmation
-* **Audit Log Viewer** — filterable table (date range, user, action, resource, result), row expand for full `AccessResult` detail, CSV export button
-* **Tenant Dashboard** — tenant health summary (active users, roles, policies, recent denials chart)
-
-### UI-Level RBAC Enforcement
-
-The admin panel itself must be governed by the same RBAC system it manages. A user with `role:viewer` must see controls but not be able to submit mutations. A user with `role:permission-manager` can manage permissions but not create tenants. Implement using a React context (`AbilityContext`) that calls `POST /api/v1/permissions/check` on load and caches results for the session. Wrap all mutation buttons in an `<Authorized action="..." resource="...">` component that disables or hides them based on the result.
-
-### Real-Time Updates
-
-Use WebSocket (SignalR) for live updates: when a role or policy changes in the backend, push an `rbac:invalidated` event to all connected admin panel clients for that tenant. On receipt, the client refetches affected data and re-evaluates cached permission checks.
+# 🔁 Phase 7 — Observability & Infrastructure
 
 ## Observability
 
@@ -360,6 +334,32 @@ Provide a complete `docker-compose.yml` for local development including: Postgre
 * Never modify an existing migration — always add a new one
 * Zero-downtime migration pattern: for breaking schema changes, use expand-contract (add new column nullable → backfill → add constraint → remove old column across separate deployments)
 * Seed data (default roles, permissions, system tenant) delivered via a dedicated `DataSeeder` service that runs idempotently on startup
+
+---
+
+# 🖥️ Phase 8 — Frontend
+
+## Admin Panel (React + TypeScript)
+
+### Component Breakdown
+
+Deliver a full component tree for the following views:
+
+* **Role Editor** — create/edit role, assign permissions via checkbox matrix, scope selector
+* **Permission Matrix View** — read-only grid: roles (columns) × permissions (rows), with scope filter
+* **User-Role Assignment** — user search, role multi-select, scope picker, effective-date + expiry-date
+* **Policy Builder UI** — visual JSON condition tree composer (add condition node, choose operator, set attribute + value), preview rendered policy JSON, test policy against a sample context
+* **Delegation Manager** — create delegation (select delegatee, permissions subset, date range), list active delegations, revoke button with confirmation
+* **Audit Log Viewer** — filterable table (date range, user, action, resource, result), row expand for full `AccessResult` detail, CSV export button
+* **Tenant Dashboard** — tenant health summary (active users, roles, policies, recent denials chart)
+
+### UI-Level RBAC Enforcement
+
+The admin panel itself must be governed by the same RBAC system it manages. A user with `role:viewer` must see controls but not be able to submit mutations. A user with `role:permission-manager` can manage permissions but not create tenants. Implement using a React context (`AbilityContext`) that calls `POST /api/v1/permissions/check` on load and caches results for the session. Wrap all mutation buttons in an `<Authorized action="..." resource="...">` component that disables or hides them based on the result.
+
+### Real-Time Updates
+
+Use WebSocket (SignalR) for live updates: when a role or policy changes in the backend, push an `rbac:invalidated` event to all connected admin panel clients for that tenant. On receipt, the client refetches affected data and re-evaluates cached permission checks.
 
 ---
 

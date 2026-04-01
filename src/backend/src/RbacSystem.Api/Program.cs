@@ -10,6 +10,7 @@ using Microsoft.IdentityModel.Tokens;
 using PermissionEngine.Infrastructure;
 using PolicyEngine.Infrastructure;
 using RbacCore.Infrastructure;
+using RbacSystem.Api.Hubs;
 using RbacSystem.Api.Infrastructure;
 using RbacSystem.Api.Middleware;
 using RbacSystem.Api.Seeding;
@@ -56,6 +57,18 @@ builder.Services
         // Log malformed / corrupt JWT events (OWASP A07)
         options.Events = new JwtBearerEvents
         {
+            // Browsers cannot set Authorization headers on WebSocket upgrades.
+            // SignalR JS client passes the token as ?access_token=... on the initial
+            // HTTP negotiate request and on the WebSocket upgrade URL.
+            OnMessageReceived = ctx =>
+            {
+                var token = ctx.Request.Query["access_token"].ToString();
+                var path  = ctx.HttpContext.Request.Path;
+                if (!string.IsNullOrEmpty(token) && path.StartsWithSegments("/api/v1/hubs"))
+                    ctx.Token = token;
+                return Task.CompletedTask;
+            },
+
             OnAuthenticationFailed = ctx =>
             {
                 var logger = ctx.HttpContext.RequestServices
@@ -77,6 +90,9 @@ builder.Services.AddAuthorization();
 // ── HttpContext / TenantContext ───────────────────────────────────────────────
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddScoped<ITenantContext, HttpTenantContext>();
+
+// ── SignalR ───────────────────────────────────────────────────────────────────
+builder.Services.AddSignalR();
 
 // ── MediatR pipeline behaviors ────────────────────────────────────────────────
 builder.Services.AddMediatR(cfg =>
@@ -183,6 +199,10 @@ if (app.Environment.IsDevelopment())
 }
 
 app.MapControllers();
+
+// SignalR hub — tenant-isolated real-time RBAC invalidation events.
+// JS client connects to /api/v1/hubs/rbac?access_token=<jwt>
+app.MapHub<RbacHub>("/api/v1/hubs/rbac");
 
 await app.SeedDevelopmentDataAsync();
 
