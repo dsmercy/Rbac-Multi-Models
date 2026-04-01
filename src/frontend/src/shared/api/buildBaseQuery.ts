@@ -5,9 +5,19 @@ import {
   type FetchBaseQueryError,
 } from '@reduxjs/toolkit/query/react';
 
+// Typed just enough to read the token — avoids a circular dep with store.ts
+interface StateWithAuth {
+  auth: { accessToken: string | null };
+}
+
 const rawBaseQuery = fetchBaseQuery({
   baseUrl: import.meta.env.VITE_API_BASE_URL ?? '/api/v1',
-  credentials: 'include', // send httpOnly cookies on every request
+  credentials: 'include',
+  prepareHeaders: (headers, { getState }) => {
+    const token = (getState() as StateWithAuth).auth.accessToken;
+    if (token) headers.set('Authorization', `Bearer ${token}`);
+    return headers;
+  },
 });
 
 let isRefreshing = false;
@@ -17,11 +27,7 @@ async function performRefresh(api: Parameters<BaseQueryFn>[1]): Promise<boolean>
   if (isRefreshing && refreshPromise !== null) return refreshPromise;
   isRefreshing = true;
   refreshPromise = (async () => {
-    const result = await rawBaseQuery(
-      { url: '/auth/refresh', method: 'POST' },
-      api,
-      {}
-    );
+    const result = await rawBaseQuery({ url: '/auth/refresh', method: 'POST' }, api, {});
     isRefreshing = false;
     refreshPromise = null;
     return !result.error;
@@ -29,12 +35,6 @@ async function performRefresh(api: Parameters<BaseQueryFn>[1]): Promise<boolean>
   return refreshPromise;
 }
 
-/**
- * Custom base query with silent token refresh.
- * On 401, attempts one silent refresh via /auth/refresh (httpOnly cookie).
- * If refresh succeeds, retries the original request.
- * If refresh fails, returns the 401 — AuthGuard redirects to login.
- */
 export const buildBaseQuery: BaseQueryFn<
   string | FetchArgs,
   unknown,

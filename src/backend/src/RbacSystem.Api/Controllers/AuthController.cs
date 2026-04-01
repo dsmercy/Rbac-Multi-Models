@@ -1,8 +1,10 @@
 using Identity.Application.Commands;
+using Identity.Application.Queries;
 using Identity.Application.Services;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using System.Security.Claims;
 
 namespace RbacSystem.Api.Controllers;
 
@@ -47,6 +49,39 @@ public sealed class AuthController : ControllerBase
         return Ok(result);
     }
 
+    /// <summary>Returns the authenticated user's profile. Used by the frontend on app boot to validate the session.</summary>
+    /// <response code="200">Session valid — returns current user profile.</response>
+    /// <response code="401">No valid Bearer token.</response>
+    /// <response code="404">User record not found (deleted after token was issued).</response>
+    [HttpGet("me")]
+    [Authorize]
+    [ProducesResponseType(typeof(MeResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> GetMe(CancellationToken ct)
+    {
+        var sub = User.FindFirstValue("sub");
+        var tid = User.FindFirstValue("tid");
+
+        if (!Guid.TryParse(sub, out var userId) || !Guid.TryParse(tid, out var tenantId))
+            return Unauthorized();
+
+        var user = await _sender.Send(new GetUserByIdQuery(userId, tenantId), ct);
+        if (user is null) return NotFound();
+
+        var isSuperAdmin = User.FindFirstValue("is_super_admin") == "True"
+                        || User.FindFirstValue("is_super_admin") == "true";
+
+        return Ok(new MeResponse(
+            user.Id,
+            user.TenantId,
+            user.Email,
+            user.DisplayName,
+            user.IsActive,
+            isSuperAdmin,
+            OnboardingCompleted: false));
+    }
+
     /// <summary>Exchange a valid refresh token for a new access token.</summary>
     /// <remarks>
     /// The refresh token is single-use sliding (7-day window). Expired or revoked
@@ -81,6 +116,16 @@ public sealed record LoginRequest(
     string Email,
     /// <summary>User's plaintext password (transmitted over TLS only).</summary>
     string Password);
+
+/// <summary>Current user profile returned by GET /auth/me.</summary>
+public sealed record MeResponse(
+    Guid Id,
+    Guid TenantId,
+    string Email,
+    string DisplayName,
+    bool IsActive,
+    bool IsSuperAdmin,
+    bool OnboardingCompleted);
 
 /// <summary>Token refresh request payload.</summary>
 public sealed record RefreshRequest(

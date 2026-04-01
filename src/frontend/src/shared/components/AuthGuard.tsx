@@ -2,7 +2,7 @@ import { useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useGetMeQuery } from '@/features/auth/authEndpoints';
 import { useAppDispatch, useAppSelector } from '@/app/hooks';
-import { setUser, setLoading } from '@/features/auth/authSlice';
+import { setLoading } from '@/features/auth/authSlice';
 import { Skeleton } from './Skeleton';
 
 interface AuthGuardProps {
@@ -28,9 +28,13 @@ export default function AuthGuard({ children }: AuthGuardProps) {
     skip: isAuthenticated, // already have a valid session in this tab
   });
 
+  // On boot, /auth/me will fail (no token in memory after page refresh) →
+  // error effect redirects to /login. This is expected — token is in-memory only.
   useEffect(() => {
     if (profile) {
-      dispatch(setUser(profile));
+      // profile loaded on boot — accessToken is null (page refresh scenario),
+      // so auth state stays read-only. Full re-login is required after refresh.
+      dispatch(setLoading(false));
     }
   }, [profile, dispatch]);
 

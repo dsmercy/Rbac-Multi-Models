@@ -2,18 +2,17 @@ import { createSlice, type PayloadAction } from '@reduxjs/toolkit';
 import type { AuthState, UserProfile } from './types';
 
 /**
- * SECURITY NOTE: Tokens are stored in httpOnly cookies set by the backend.
- * This slice never stores token values — only the parsed user profile and
- * the current tenantId derived from it.
+ * SECURITY NOTE: The access token is stored in Redux (JS memory) only — it is
+ * never written to localStorage or sessionStorage. It is lost on page refresh,
+ * which triggers a re-login. This is an acceptable trade-off for this admin panel.
  *
- * DO NOT add accessToken or refreshToken fields to this state.
- * Storing tokens in JS-accessible storage (localStorage, Redux, sessionStorage)
- * is an XSS risk. The browser sends httpOnly cookies automatically on every
- * same-origin request — no JS involvement needed.
+ * The alternative (httpOnly cookies) would require the backend to set/clear them,
+ * which is a future improvement. For now, Bearer token in memory is the approach.
  */
 const initialState: AuthState = {
   user: null,
   tenantId: null,
+  accessToken: null,
   isAuthenticated: false,
   isLoading: true, // true on boot until /auth/me resolves
 };
@@ -22,6 +21,13 @@ export const authSlice = createSlice({
   name: 'auth',
   initialState,
   reducers: {
+    setAuth(state, action: PayloadAction<{ user: UserProfile; accessToken: string }>) {
+      state.user = action.payload.user;
+      state.tenantId = action.payload.user.tenantId;
+      state.accessToken = action.payload.accessToken;
+      state.isAuthenticated = true;
+      state.isLoading = false;
+    },
     setUser(state, action: PayloadAction<UserProfile>) {
       state.user = action.payload;
       state.tenantId = action.payload.tenantId;
@@ -29,7 +35,6 @@ export const authSlice = createSlice({
       state.isLoading = false;
     },
     setTenantId(state, action: PayloadAction<string>) {
-      // Called by TenantLayout when the URL tenantId param is validated.
       state.tenantId = action.payload;
     },
     setLoading(state, action: PayloadAction<boolean>) {
@@ -38,11 +43,12 @@ export const authSlice = createSlice({
     logout(state) {
       state.user = null;
       state.tenantId = null;
+      state.accessToken = null;
       state.isAuthenticated = false;
       state.isLoading = false;
     },
   },
 });
 
-export const { setUser, setTenantId, setLoading, logout } = authSlice.actions;
+export const { setAuth, setUser, setTenantId, setLoading, logout } = authSlice.actions;
 export default authSlice.reducer;

@@ -33,5 +33,10 @@ export const authEndpoints = apiSlice.injectEndpoints({
   overrideExisting: false,
 });
 
-export const { useLoginMutation, useLogoutMutation, useRefreshTokenMutation, useGetMeQuery } =
-  authEndpoints;
+export const {
+  useLoginMutation,
+  useLogoutMutation,
+  useRefreshTokenMutation,
+  useGetMeQuery,
+  useLazyGetMeQuery,
+} = authEndpoints;

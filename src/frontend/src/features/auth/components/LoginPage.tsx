@@ -3,7 +3,10 @@ import { useNavigate } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import { useLoginMutation } from '../authEndpoints';
+import { useLoginMutation, useLazyGetMeQuery } from '../authEndpoints';
+import { useAppDispatch } from '@/app/hooks';
+import { setAuth } from '../authSlice';
+import type { UserProfile } from '../types';
 
 const loginSchema = z.object({
   tenantId: z.string().uuid('Must be a valid tenant UUID'),
@@ -13,10 +16,26 @@ const loginSchema = z.object({
 
 type LoginInput = z.infer<typeof loginSchema>;
 
+// Placeholder profile used to seed Redux with the access token so that
+// prepareHeaders can attach Authorization on the /auth/me call immediately after.
+const placeholderProfile = (tenantId: string, email: string): UserProfile => ({
+  id: '',
+  tenantId,
+  email,
+  displayName: '',
+  isActive: true,
+  isSuperAdmin: false,
+  onboardingCompleted: false,
+});
+
 export default function LoginPage() {
   const navigate = useNavigate();
-  const [login, { isLoading, error }] = useLoginMutation();
+  const dispatch = useAppDispatch();
+  const [login, { isLoading }] = useLoginMutation();
   const [serverError, setServerError] = useState<string | null>(null);
+
+  // useLazyQuery — fires only when triggerGetMe() is called explicitly
+  const [triggerGetMe] = useLazyGetMeQuery();
 
   const {
     register,
@@ -27,8 +46,19 @@ export default function LoginPage() {
   const onSubmit = async (data: LoginInput) => {
     setServerError(null);
     try {
-      const result = await login(data).unwrap();
-      navigate(`/${result.tenantId}/dashboard`);
+      // 1. Authenticate — backend returns token pair in response body
+      const tokenPair = await login(data).unwrap();
+
+      // 2. Store the access token in Redux immediately.
+      //    dispatch() is synchronous, so prepareHeaders in buildBaseQuery will
+      //    read the token on the very next RTK Query request.
+      dispatch(setAuth({ user: placeholderProfile(data.tenantId, data.email), accessToken: tokenPair.accessToken }));
+
+      // 3. Fetch the real user profile — Authorization header is now attached
+      const profile = await triggerGetMe().unwrap();
+      dispatch(setAuth({ user: profile, accessToken: tokenPair.accessToken }));
+
+      navigate(`/${data.tenantId}/dashboard`);
     } catch {
       setServerError('Invalid credentials. Please try again.');
     }
@@ -94,11 +124,6 @@ export default function LoginPage() {
           {serverError && (
             <p className="text-sm text-destructive bg-destructive/10 px-3 py-2 rounded-md">
               {serverError}
-            </p>
-          )}
-          {error && !serverError && (
-            <p className="text-sm text-destructive bg-destructive/10 px-3 py-2 rounded-md">
-              Login failed. Please check your credentials.
             </p>
           )}
 

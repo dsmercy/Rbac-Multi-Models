@@ -7,7 +7,8 @@ export interface LoginInput {
 export interface TokenPair {
   accessToken: string;
   refreshToken: string;
-  tenantId: string;
+  accessTokenExpiresAt: string;
+  tokenVersion: number;
 }
 
 export interface UserProfile {
@@ -23,6 +24,7 @@ export interface UserProfile {
 export interface AuthState {
   user: UserProfile | null;
   tenantId: string | null;
+  accessToken: string | null;
   isAuthenticated: boolean;
   isLoading: boolean;
 }

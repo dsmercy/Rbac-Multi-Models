@@ -9,6 +9,7 @@ import { Skeleton } from '@/shared/components/Skeleton';
 
 const LoginPage = lazy(() => import('@/features/auth/components/LoginPage'));
 const OnboardingWizard = lazy(() => import('@/features/onboarding/components/OnboardingWizard'));
+const DashboardPage = lazy(() => import('@/shared/components/DashboardPage'));
 
 export const router = createBrowserRouter([
   {
@@ -30,6 +31,14 @@ export const router = createBrowserRouter([
       {
         index: true,
         element: <Navigate to="dashboard" replace />,
+      },
+      {
+        path: 'dashboard',
+        element: (
+          <Suspense fallback={<Skeleton />}>
+            <DashboardPage />
+          </Suspense>
+        ),
       },
       {
         path: 'onboarding',
