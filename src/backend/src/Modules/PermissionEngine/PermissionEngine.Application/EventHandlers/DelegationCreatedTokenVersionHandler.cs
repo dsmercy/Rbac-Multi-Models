@@ -1,5 +1,6 @@
 using BuildingBlocks.Domain.Events;
 using MediatR;
+using PermissionEngine.Application.Telemetry;
 using PermissionEngine.Domain.Interfaces;
 
 namespace PermissionEngine.Application.EventHandlers;
@@ -27,5 +28,10 @@ public sealed class DelegationCreatedTokenVersionHandler
     public Task Handle(
         DelegationCreatedEvent notification,
         CancellationToken cancellationToken)
-        => _cache.IncrementTokenVersionAsync(notification.DelegateeId, cancellationToken);
+    {
+        RbacMetrics.DelegationCreated(notification.TenantId.ToString());
+        RbacMetrics.RecordCacheEviction("token-version", notification.TenantId.ToString());
+        RbacMetrics.RecordCacheEviction("delegation",    notification.TenantId.ToString());
+        return _cache.IncrementTokenVersionAsync(notification.DelegateeId, cancellationToken);
+    }
 }

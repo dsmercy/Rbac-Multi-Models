@@ -1,5 +1,6 @@
 using BuildingBlocks.Domain.Events;
 using MediatR;
+using PermissionEngine.Application.Telemetry;
 using PermissionEngine.Domain.Interfaces;
 
 namespace PermissionEngine.Application.EventHandlers;
@@ -28,8 +29,13 @@ public sealed class DelegationExpiredTokenVersionHandler
         => _cache = cache;
 
     public Task Handle(DelegationExpiredEvent notification, CancellationToken cancellationToken)
-        => _cache.InvalidateUserAsync(
+    {
+        RbacMetrics.DelegationEnded(notification.TenantId.ToString());
+        RbacMetrics.RecordCacheEviction("delegation",    notification.TenantId.ToString());
+        RbacMetrics.RecordCacheEviction("token-version", notification.TenantId.ToString());
+        return _cache.InvalidateUserAsync(
             notification.DelegateeId,
             notification.TenantId,
             cancellationToken);
+    }
 }

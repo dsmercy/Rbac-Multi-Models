@@ -91,6 +91,9 @@ builder.Services.AddAuthorization();
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddScoped<ITenantContext, HttpTenantContext>();
 
+// ── OpenTelemetry (tracing → Jaeger, metrics → Prometheus /metrics) ──────────
+builder.Services.AddRbacObservability(builder.Configuration);
+
 // ── SignalR ───────────────────────────────────────────────────────────────────
 builder.Services.AddSignalR();
 
@@ -184,6 +187,11 @@ app.Use(async (ctx, next) =>
     ctx.Response.Headers["Permissions-Policy"]         = "geolocation=(), microphone=()";
     await next();
 });
+
+// Prometheus metrics scrape endpoint — unauthenticated, no tenant filter needed.
+// In production, restrict /metrics access to the Prometheus scraper IP via a
+// network policy or reverse-proxy rule rather than requiring auth.
+app.UseOpenTelemetryPrometheusScrapingEndpoint();
 
 app.UseAuthentication();
 app.UseAuthorization();

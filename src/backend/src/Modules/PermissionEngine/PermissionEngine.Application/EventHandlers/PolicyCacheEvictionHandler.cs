@@ -1,5 +1,6 @@
 using BuildingBlocks.Domain.Events;
 using MediatR;
+using PermissionEngine.Application.Telemetry;
 using PermissionEngine.Domain.Interfaces;
 
 namespace PermissionEngine.Application.EventHandlers;
@@ -28,11 +29,23 @@ public sealed class PolicyCacheEvictionHandler
         => _cache = cache;
 
     public Task Handle(PolicyCreatedEvent notification, CancellationToken cancellationToken)
-        => _cache.InvalidateTenantPermCacheAsync(notification.TenantId, cancellationToken);
+    {
+        RbacMetrics.RecordCacheEviction("perm",   notification.TenantId.ToString());
+        RbacMetrics.RecordCacheEviction("policy", notification.TenantId.ToString());
+        return _cache.InvalidateTenantPermCacheAsync(notification.TenantId, cancellationToken);
+    }
 
     public Task Handle(PolicyUpdatedEvent notification, CancellationToken cancellationToken)
-        => _cache.InvalidateTenantPermCacheAsync(notification.TenantId, cancellationToken);
+    {
+        RbacMetrics.RecordCacheEviction("perm",   notification.TenantId.ToString());
+        RbacMetrics.RecordCacheEviction("policy", notification.TenantId.ToString());
+        return _cache.InvalidateTenantPermCacheAsync(notification.TenantId, cancellationToken);
+    }
 
     public Task Handle(PolicyDeletedEvent notification, CancellationToken cancellationToken)
-        => _cache.InvalidateTenantPermCacheAsync(notification.TenantId, cancellationToken);
+    {
+        RbacMetrics.RecordCacheEviction("perm",   notification.TenantId.ToString());
+        RbacMetrics.RecordCacheEviction("policy", notification.TenantId.ToString());
+        return _cache.InvalidateTenantPermCacheAsync(notification.TenantId, cancellationToken);
+    }
 }

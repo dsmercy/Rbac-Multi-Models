@@ -1,4 +1,5 @@
 using MediatR;
+using PermissionEngine.Application.Telemetry;
 using PermissionEngine.Domain.Interfaces;
 using BuildingBlocks.Domain.Events;
 
@@ -27,5 +28,9 @@ public sealed class UserRoleAssignedTokenVersionHandler
     public Task Handle(
         UserRoleAssignedEvent notification,
         CancellationToken cancellationToken)
-        => _cache.IncrementTokenVersionAsync(notification.UserId, cancellationToken);
+    {
+        RbacMetrics.RecordCacheEviction("token-version", notification.TenantId.ToString());
+        RbacMetrics.RecordCacheEviction("roles",         notification.TenantId.ToString());
+        return _cache.IncrementTokenVersionAsync(notification.UserId, cancellationToken);
+    }
 }

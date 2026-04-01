@@ -2,6 +2,7 @@ using AuditLogging.Application.Services;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using PermissionEngine.Application.Pipeline;
+using PermissionEngine.Application.Telemetry;
 using PermissionEngine.Domain.Exceptions;
 using PermissionEngine.Domain.Interfaces;
 using PermissionEngine.Domain.Models;
@@ -54,6 +55,17 @@ public sealed class PermissionEngineService : IPermissionEngine
         EvaluationContext context,
         CancellationToken ct = default)
     {
+        // ── Distributed tracing — parent span for the full evaluation ─────────
+        using var activity = RbacActivitySource.Source.StartActivity(
+            RbacActivitySource.SpanEval,
+            ActivityKind.Internal);
+
+        activity?.SetTag(RbacActivitySource.TagTenantId,   context.TenantId.ToString());
+        activity?.SetTag(RbacActivitySource.TagUserId,     userId.ToString());
+        activity?.SetTag(RbacActivitySource.TagAction,     action);
+        activity?.SetTag(RbacActivitySource.TagResourceId, resourceId.ToString());
+        activity?.SetTag(RbacActivitySource.TagScopeId,    scopeId.ToString());
+
         var overallSw = Stopwatch.StartNew();
 
         // ── Tenant guard ─────────────────────────────────────────────────────
@@ -88,7 +100,9 @@ public sealed class PermissionEngineService : IPermissionEngine
         AccessResult? cached;
         try
         {
+            using var cacheSpan = RbacActivitySource.Source.StartActivity(RbacActivitySource.SpanCacheLookup);
             cached = await _cache.GetAsync(userId, action, resourceId, scopeId, context.TenantId, ct);
+            cacheSpan?.SetTag(RbacActivitySource.TagCacheHit, cached is not null);
         }
         catch (CacheUnavailableException ex)
         {
@@ -97,6 +111,9 @@ public sealed class PermissionEngineService : IPermissionEngine
 
         if (cached is not null)
         {
+            activity?.SetTag(RbacActivitySource.TagResult,    "granted");
+            activity?.SetTag(RbacActivitySource.TagCacheHit,  true);
+            RbacMetrics.RecordEval(cached.IsGranted, cacheHit: true, context.TenantId.ToString(), overallSw.Elapsed.TotalMilliseconds);
             await RecordDecisionAsync(userId, action, resourceId, scopeId, context, cached, ct);
             return cached;
         }
@@ -134,6 +151,9 @@ public sealed class PermissionEngineService : IPermissionEngine
                 "Permission evaluation exceeded {TimeoutMs}ms for user {UserId}, action {Action}",
                 _evalTimeoutMs, userId, action);
             result = AccessResult.Denied(DenialReason.EvaluationTimeout, overallSw.ElapsedMilliseconds);
+            activity?.SetTag(RbacActivitySource.TagResult,       "denied");
+            activity?.SetTag(RbacActivitySource.TagDeniedReason, DenialReason.EvaluationTimeout.ToString());
+            RbacMetrics.RecordEval(granted: false, cacheHit: false, context.TenantId.ToString(), overallSw.Elapsed.TotalMilliseconds);
             await RecordDecisionAsync(userId, action, resourceId, scopeId, context, result, ct);
             return result;
         }
@@ -143,9 +163,21 @@ public sealed class PermissionEngineService : IPermissionEngine
                 await _cache.ReleaseStampedeLockAsync(userId, action, resourceId, scopeId, context.TenantId);
         }
 
+        // ── Span tags for the final result ────────────────────────────────────
+        activity?.SetTag(RbacActivitySource.TagResult,       result.IsGranted ? "granted" : "denied");
+        activity?.SetTag(RbacActivitySource.TagCacheHit,     false);
+        activity?.SetTag(RbacActivitySource.TagEvalLatencyMs, overallSw.Elapsed.TotalMilliseconds);
+        if (!result.IsGranted && result.Reason.HasValue)
+            activity?.SetTag(RbacActivitySource.TagDeniedReason, result.Reason.Value.ToString());
+        if (result.DelegationChain is not null)
+            activity?.SetTag(RbacActivitySource.TagDelegationChainId, result.DelegationChain.DelegationId.ToString());
+
+        RbacMetrics.RecordEval(result.IsGranted, cacheHit: false, context.TenantId.ToString(), overallSw.Elapsed.TotalMilliseconds);
+
         // ── Cache the result ─────────────────────────────────────────────────
         try
         {
+            using var cacheWriteSpan = RbacActivitySource.Source.StartActivity(RbacActivitySource.SpanCacheWrite);
             var config = await _tenantService.GetConfigAsync(context.TenantId, ct);
             await _cache.SetAsync(
                 userId, action, resourceId, scopeId, context.TenantId,
@@ -181,7 +213,13 @@ public sealed class PermissionEngineService : IPermissionEngine
         AccessResult? result = null;
         foreach (var step in _steps)
         {
+            using var stepSpan = RbacActivitySource.Source.StartActivity(RbacActivitySource.SpanPipelineStep);
+            stepSpan?.SetTag(RbacActivitySource.TagStepName,  step.GetType().Name);
+            stepSpan?.SetTag(RbacActivitySource.TagStepOrder, step.Order);
+
             result = await step.EvaluateAsync(request, ct);
+
+            stepSpan?.SetTag(RbacActivitySource.TagResult, result is null ? "continue" : (result.IsGranted ? "granted" : "denied"));
             if (result is not null)
                 break;
         }
