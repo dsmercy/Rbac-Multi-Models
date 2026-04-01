@@ -1,0 +1,823 @@
+
+You are a senior React engineer and UI architect with deep experience building enterprise-grade admin panels — specifically access control, IAM, and security tooling products.
+
+I am a senior full-stack developer. Your task is to generate a **complete, implementation-ready frontend design and development plan** for the React admin panel of a production-grade RBAC system. The output must be structured, opinionated, and immediately actionable — no high-level summaries. Produce the actual artifacts: component trees, TypeScript interfaces, hook signatures, store shapes, and configuration snippets a senior developer can implement directly from.
+
+---
+
+# 🎯 Context
+
+The admin panel is the management UI for an enterprise RBAC system that supports:
+
+* **Multi-tenancy** — each tenant is an isolated organisation; the current tenant is always in scope
+* **Roles & permissions** — roles group permissions; users are assigned roles within a scope hierarchy
+* **Scoped access** — org → department → project hierarchy with downward inheritance
+* **ABAC policies** — JSON condition trees evaluated at runtime
+* **Delegation** — time-bound, subset-only access grants between users
+* **Audit logging** — immutable, append-only log of every access decision and admin action
+
+The backend is a .NET 8 REST API with JWT authentication, Redis caching, and SignalR WebSocket support. All API contracts are versioned under `/api/v1/`.
+
+---
+
+# 🏗️ Phase 1 — Project Structure & Architecture
+
+## Technology Stack
+
+* React 18 + TypeScript (strict mode)
+* Vite (bundler)
+* RTK Query (server data: API calls, caching, cache invalidation)
+* Zustand (local UI state: filters, modals, selections, transient form state)
+* React Router v6 (routing)
+* React Hook Form + Zod (forms and schema validation)
+* TailwindCSS (styling)
+* shadcn/ui (component primitives)
+* Playwright (E2E testing)
+* Vitest + React Testing Library (unit and integration tests)
+* MSW — Mock Service Worker (API mocking)
+
+## Folder Structure
+
+Provide the complete folder layout:
+
+```
+/src
+  /app
+    store.ts              ← Redux store configuration (RTK Query base)
+    router.tsx            ← React Router root, composes all route configs
+  /routes
+    index.tsx             ← flat export of all route config objects
+    /auth                 ← auth route config (login, callback)
+    /tenant               ← tenant-scoped route config (all protected routes)
+  /features
+    /auth
+    /roles
+    /permissions
+    /users
+    /policies
+    /delegations
+    /audit
+    /notifications
+    /onboarding
+  /shared
+    /components           ← reusable UI primitives (Authorized, Skeleton, Toast, etc.)
+    /hooks                ← useCurrentTenant, useAbility, useSignalR, etc.
+    /api                  ← apiSlice RTK Query base + all endpoint definitions
+    /stores               ← Zustand store definitions
+    /utils
+    /types                ← shared TypeScript interfaces and enums
+  /mocks                  ← MSW handlers and fixture data
+  /test                   ← Playwright config, fixtures, page objects
+```
+
+Each feature folder must follow this internal structure:
+
+```
+/features/roles
+  components/             ← feature-specific components
+  hooks/                  ← feature-local hooks
+  roleEndpoints.ts        ← RTK Query endpoint injections
+  roleStore.ts            ← Zustand store for role editor UI state
+  types.ts                ← feature-specific TypeScript types
+  index.ts                ← public exports only
+```
+
+## Centralised Route Config
+
+All route definitions live in `/src/routes/` — never scattered across feature folders or component files. The router reads a single composed config; features contribute their route segments by exporting a config object, not by rendering `<Route>` elements themselves.
+
+### Why centralised
+
+* One place to audit every URL in the app
+* Lazy loading is configured at the route level, not inside components
+* Tenant scope enforcement is applied uniformly in one layout, not repeated per feature
+* Adding or removing a feature's routes is a single-file change with no side effects elsewhere
+
+### Route config types
+
+```typescript
+// /src/routes/types.ts
+
+export interface AppRoute {
+  path: string;
+  component: React.LazyExoticComponent<React.ComponentType>;
+  // Optional guard — evaluated before the component renders.
+  // Return true to allow, false to redirect to /login.
+  guard?: (context: RouteGuardContext) => boolean;
+}
+
+export interface RouteGuardContext {
+  isAuthenticated: boolean;
+  tenantId: string | null;
+  can: (action: string, resource: string) => boolean;
+}
+```
+
+### Feature route configs
+
+Each feature exports a plain array of `AppRoute` objects from its `index.ts`. No JSX, no `<Route>` — just data.
+
+```typescript
+// /src/features/roles/index.ts
+
+import { lazy } from 'react';
+import type { AppRoute } from '@/routes/types';
+
+export const roleRoutes: AppRoute[] = [
+  {
+    path: 'roles',
+    component: lazy(() => import('./components/RoleListPage')),
+  },
+  {
+    path: 'roles/new',
+    component: lazy(() => import('./components/RoleEditorPage')),
+    guard: ({ can }) => can('role:create', 'roles'),
+  },
+  {
+    path: 'roles/:roleId/edit',
+    component: lazy(() => import('./components/RoleEditorPage')),
+    guard: ({ can }) => can('role:update', 'roles'),
+  },
+];
+```
+
+### Composed route index
+
+```typescript
+// /src/routes/index.tsx
+
+import { roleRoutes } from '@/features/roles';
+import { userRoutes } from '@/features/users';
+import { permissionRoutes } from '@/features/permissions';
+import { policyRoutes } from '@/features/policies';
+import { delegationRoutes } from '@/features/delegations';
+import { auditRoutes } from '@/features/audit';
+import { notificationRoutes } from '@/features/notifications';
+
+// All tenant-scoped feature routes in one place.
+// Order determines the route precedence — more specific paths first.
+export const tenantRoutes = [
+  ...roleRoutes,
+  ...userRoutes,
+  ...permissionRoutes,
+  ...policyRoutes,
+  ...delegationRoutes,
+  ...auditRoutes,
+  ...notificationRoutes,
+];
+```
+
+### Router root
+
+```typescript
+// /src/app/router.tsx
+
+import { createBrowserRouter, RouterProvider, Navigate } from 'react-router-dom';
+import { Suspense } from 'react';
+import { TenantLayout } from '@/shared/components/TenantLayout';
+import { AuthGuard } from '@/shared/components/AuthGuard';
+import { RouteGuard } from '@/shared/components/RouteGuard';
+import { Skeleton } from '@/shared/components/Skeleton';
+import { tenantRoutes } from '@/routes';
+import { lazy } from 'react';
+
+const LoginPage = lazy(() => import('@/features/auth/components/LoginPage'));
+const NotFoundPage = lazy(() => import('@/shared/components/NotFoundPage'));
+
+const router = createBrowserRouter([
+  {
+    // Public routes — no auth required
+    path: '/',
+    element: <Suspense fallback={<Skeleton />}><LoginPage /></Suspense>,
+  },
+  {
+    path: '/auth/callback',
+    element: lazy(() => import('@/features/auth/components/OAuthCallback')),
+  },
+
+  {
+    // All tenant-scoped routes live under /:tenantId
+    // TenantLayout validates the tenantId param and sets the ambient tenant context
+    path: '/:tenantId',
+    element: (
+      <AuthGuard>
+        <TenantLayout />
+      </AuthGuard>
+    ),
+    children: tenantRoutes.map((route) => ({
+      path: route.path,
+      element: (
+        <RouteGuard guard={route.guard}>
+          <Suspense fallback={<Skeleton />}>
+            <route.component />
+          </Suspense>
+        </RouteGuard>
+      ),
+    })),
+  },
+
+  {
+    path: '*',
+    element: <NotFoundPage />,
+  },
+]);
+
+export function AppRouter() {
+  return <RouterProvider router={router} />;
+}
+```
+
+## Route Structure (Feature-Based, Tenant-Scoped)
+
+Every protected route is nested under `/:tenantId`. There are no protected routes outside this segment — this is enforced structurally by the router, not by ad-hoc checks in individual pages.
+
+```
+/                               → LoginPage (public)
+/auth/callback                  → OAuthCallback (public)
+
+/:tenantId                      → TenantLayout (AuthGuard wraps all children)
+  /:tenantId/dashboard          → TenantDashboard
+  /:tenantId/roles              → RoleListPage
+  /:tenantId/roles/new          → RoleEditorPage         [guard: role:create]
+  /:tenantId/roles/:roleId/edit → RoleEditorPage         [guard: role:update]
+  /:tenantId/permissions        → PermissionMatrixPage
+  /:tenantId/users              → UserListPage
+  /:tenantId/users/:userId      → UserDetailPage
+  /:tenantId/policies           → PolicyListPage
+  /:tenantId/policies/new       → PolicyBuilderPage      [guard: policy:create]
+  /:tenantId/policies/:policyId → PolicyBuilderPage      [guard: policy:update]
+  /:tenantId/delegations        → DelegationManagerPage
+  /:tenantId/audit              → AuditLogViewerPage
+  /:tenantId/notifications      → NotificationCentrePage
+
+* → NotFoundPage (public)
+```
+
+### `TenantLayout` responsibilities
+
+`TenantLayout` is the single component that owns tenant context. It must:
+
+1. Extract `:tenantId` from the URL param via `useParams()`
+2. Validate the `tenantId` matches the `tid` claim in the current session (call `GET /api/v1/auth/me` which is already cached by RTK Query) — redirect to `/` with a `403` toast if they differ
+3. Set the ambient tenant context in the Redux store (`dispatch(setTenantId(tenantId))`) so `buildBaseQuery` can inject `X-Tenant-Id` on every subsequent request
+4. Fetch and cache the user's permission set for this tenant via `useCheckPermissionsQuery` — this populates `AbilityContext` for all child routes
+5. Render the nav shell (sidebar, top bar, notification bell) and an `<Outlet />` for child routes
+
+A user cannot access `/:tenantId/*` for a tenant they do not belong to — the layout enforces this before any feature component renders.
+
+### `AuthGuard`
+
+```typescript
+// /src/shared/components/AuthGuard.tsx
+
+export function AuthGuard({ children }: { children: React.ReactNode }) {
+  const { isAuthenticated, isLoading } = useAuthStatus();
+
+  if (isLoading) return <Skeleton />;
+  if (!isAuthenticated) return <Navigate to="/" replace />;
+
+  return <>{children}</>;
+}
+```
+
+### `RouteGuard`
+
+```typescript
+// /src/shared/components/RouteGuard.tsx
+
+interface RouteGuardProps {
+  guard?: (ctx: RouteGuardContext) => boolean;
+  children: React.ReactNode;
+}
+
+export function RouteGuard({ guard, children }: RouteGuardProps) {
+  const ctx = useRouteGuardContext();   // builds RouteGuardContext from store + AbilityContext
+
+  if (!guard) return <>{children}</>;
+
+  return guard(ctx)
+    ? <>{children}</>
+    : <Navigate to="../" replace />;    // relative redirect — stays within the tenant segment
+}
+```
+
+### Lazy loading
+
+Every page component is wrapped in `React.lazy()` at the point of import in the feature's route config. The `Suspense` boundary with a `<Skeleton />` fallback is applied once in the router root — not per feature, not per page. This means:
+
+* Each page's JS bundle is only downloaded when the user first navigates to that route
+* Adding a new page never touches the router root — only the feature's route config export
+* The loading experience is consistent across all routes
+
+Never import page components eagerly in route configs. The pattern `lazy(() => import('./components/RoleListPage'))` is the only permitted form.
+
+## Module Boundary Rules
+
+* No feature may import directly from another feature's internal files — only from its `index.ts` public exports
+* No API calls inside components — all data fetching goes through RTK Query hooks defined in `/shared/api`
+* No business logic inside components — extract to custom hooks
+* Zustand stores are feature-scoped; no single global god-store
+* No `<Route>` elements inside feature components — route structure is defined in route config objects only
+
+---
+
+# 🔌 Phase 2 — API Layer
+
+## Centralised API Slice
+
+There is exactly **one** `createApi` call in the entire codebase, located in `/src/shared/api/apiSlice.ts`. This is the single source of truth for all server communication. Features never create their own `createApi` instances — they inject endpoints into this shared base.
+
+### Why one slice
+
+Multiple `createApi` instances create isolated caches that cannot share tags, invalidate each other's data, or deduplicate in-flight requests. A single slice means a mutation in one feature can invalidate a query in another without any cross-feature coupling.
+
+### Base slice definition
+
+```typescript
+// /src/shared/api/apiSlice.ts
+
+import { createApi } from '@reduxjs/toolkit/query/react';
+import { buildBaseQuery } from './buildBaseQuery';
+
+// Tag types are the exhaustive list of cacheable entity types in the app.
+// Add a new entry here whenever a new entity is introduced — nowhere else.
+const TAG_TYPES = [
+  'Role',
+  'Permission',
+  'User',
+  'Policy',
+  'Delegation',
+  'AuditLog',
+  'Tenant',
+  'Notification',
+] as const;
+
+export type TagType = (typeof TAG_TYPES)[number];
+
+export const apiSlice = createApi({
+  reducerPath: 'api',
+  baseQuery: buildBaseQuery,        // custom — see Base Query section below
+  tagTypes: TAG_TYPES,
+  endpoints: () => ({}),            // all endpoints injected per feature
+});
+```
+
+### Feature endpoint injection
+
+Each feature injects its own endpoints using `apiSlice.injectEndpoints`. The feature file only touches its own tag types — it never reaches into another feature's tags directly.
+
+```typescript
+// /src/features/roles/roleEndpoints.ts
+
+import { apiSlice } from '@/shared/api/apiSlice';
+import type { Role, CreateRoleInput, UpdateRoleInput } from './types';
+
+export const roleEndpoints = apiSlice.injectEndpoints({
+  endpoints: (builder) => ({
+
+    getRoles: builder.query<Role[], { tenantId: string }>({
+      query: ({ tenantId }) => `/tenants/${tenantId}/roles`,
+      providesTags: (result) =>
+        result
+          ? [
+              ...result.map(({ id }) => ({ type: 'Role' as const, id })),
+              { type: 'Role', id: 'LIST' },
+            ]
+          : [{ type: 'Role', id: 'LIST' }],
+    }),
+
+    getRoleById: builder.query<Role, { tenantId: string; roleId: string }>({
+      query: ({ tenantId, roleId }) => `/tenants/${tenantId}/roles/${roleId}`,
+      providesTags: (_result, _err, { roleId }) => [{ type: 'Role', id: roleId }],
+    }),
+
+    createRole: builder.mutation<Role, { tenantId: string; body: CreateRoleInput }>({
+      query: ({ tenantId, body }) => ({
+        url: `/tenants/${tenantId}/roles`,
+        method: 'POST',
+        body,
+      }),
+      invalidatesTags: [{ type: 'Role', id: 'LIST' }],
+    }),
+
+    updateRole: builder.mutation<Role, { tenantId: string; roleId: string; body: UpdateRoleInput }>({
+      query: ({ tenantId, roleId, body }) => ({
+        url: `/tenants/${tenantId}/roles/${roleId}`,
+        method: 'PUT',
+        body,
+      }),
+      invalidatesTags: (_result, _err, { roleId }) => [{ type: 'Role', id: roleId }],
+    }),
+
+    deleteRole: builder.mutation<void, { tenantId: string; roleId: string }>({
+      query: ({ tenantId, roleId }) => ({
+        url: `/tenants/${tenantId}/roles/${roleId}`,
+        method: 'DELETE',
+      }),
+      invalidatesTags: (_result, _err, { roleId }) => [
+        { type: 'Role', id: roleId },
+        { type: 'Role', id: 'LIST' },
+      ],
+    }),
+  }),
+
+  overrideExisting: false,
+});
+
+// Export typed hooks — generated automatically by RTK Query
+export const {
+  useGetRolesQuery,
+  useGetRoleByIdQuery,
+  useCreateRoleMutation,
+  useUpdateRoleMutation,
+  useDeleteRoleMutation,
+} = roleEndpoints;
+```
+
+Apply this same pattern to every feature. Each feature file owns its own endpoint definitions and exports its own hooks. Nothing else in the codebase calls `apiSlice` directly.
+
+### `LIST` tag convention
+
+Every collection query provides a sentinel `{ type: 'X', id: 'LIST' }` tag. Every create mutation invalidates `LIST`. Item-level mutations (update, delete) invalidate the specific `{ type: 'X', id }` tag only — not the whole list — to avoid unnecessary refetches when editing a single record. This is the standard RTK Query pattern; apply it uniformly across all features.
+
+### Adding a new entity
+
+When a new entity is introduced:
+1. Add its tag type to `TAG_TYPES` in `apiSlice.ts` — one place, one line
+2. Create `/src/features/{entity}/{entity}Endpoints.ts` following the pattern above
+3. Export hooks from the feature's `index.ts`
+
+No other file needs to change.
+
+## Custom Base Query (`buildBaseQuery`)
+
+The base query lives in `/src/shared/api/buildBaseQuery.ts` and is the single place for all cross-cutting HTTP concerns. Features never configure these themselves.
+
+```typescript
+// /src/shared/api/buildBaseQuery.ts
+
+import {
+  fetchBaseQuery,
+  type BaseQueryFn,
+  type FetchArgs,
+  type FetchBaseQueryError,
+} from '@reduxjs/toolkit/query/react';
+import { v4 as uuidv4 } from 'uuid';
+import type { RootState } from '@/app/store';
+import { logout } from '@/features/auth/authSlice';
+
+const rawBaseQuery = fetchBaseQuery({
+  baseUrl: import.meta.env.VITE_API_BASE_URL,
+  // credentials: 'include' sends httpOnly cookies automatically — no manual token handling
+  credentials: 'include',
+  prepareHeaders: (headers, { getState }) => {
+    const tenantId = (getState() as RootState).auth.tenantId;
+    if (tenantId) {
+      headers.set('X-Tenant-Id', tenantId);
+    }
+    // Attach a unique correlation ID to every request for distributed tracing
+    headers.set('X-Correlation-Id', uuidv4());
+    return headers;
+  },
+});
+
+let isRefreshing = false;
+
+export const buildBaseQuery: BaseQueryFn<
+  string | FetchArgs,
+  unknown,
+  FetchBaseQueryError
+> = async (args, api, extraOptions) => {
+  let result = await rawBaseQuery(args, api, extraOptions);
+
+  if (result.error?.status === 401 && !isRefreshing) {
+    isRefreshing = true;
+    // Attempt a silent token refresh using the httpOnly refresh cookie
+    const refreshResult = await rawBaseQuery(
+      { url: '/auth/refresh', method: 'POST' },
+      api,
+      extraOptions,
+    );
+    isRefreshing = false;
+
+    if (refreshResult.data) {
+      // Refresh succeeded — retry the original request
+      result = await rawBaseQuery(args, api, extraOptions);
+    } else {
+      // Refresh failed — session is dead, force logout
+      api.dispatch(logout());
+    }
+  }
+
+  return result;
+};
+```
+
+The three responsibilities of `buildBaseQuery`:
+
+* **Cookie-based auth** — `credentials: 'include'` means the browser attaches the httpOnly access token cookie on every request. No JS code reads or writes the token value directly.
+* **Transparent token refresh** — a single `401` triggers one refresh attempt. A guard flag (`isRefreshing`) prevents concurrent refresh races. If refresh fails, `logout()` is dispatched and the app redirects to `/login`.
+* **Cross-cutting headers** — tenant ID and correlation ID are injected once here, not duplicated across endpoint definitions.
+
+## Tag Invalidation Strategy
+
+Every mutation must declare its invalidation tags. The rule: invalidate the minimum set of tags needed — never invalidate `'Role'` (all roles) when only one record changed.
+
+| Mutation | Invalidates |
+|---|---|
+| `createRole` | `{ type: 'Role', id: 'LIST' }` |
+| `updateRole` | `{ type: 'Role', id: roleId }` |
+| `deleteRole` | `{ type: 'Role', id: roleId }`, `{ type: 'Role', id: 'LIST' }` |
+| `assignPermissionToRole` | `{ type: 'Role', id: roleId }`, `{ type: 'Permission', id: 'LIST' }` |
+| `assignRoleToUser` | `{ type: 'User', id: userId }`, `{ type: 'Role', id: 'LIST' }` |
+| `revokeRoleFromUser` | `{ type: 'User', id: userId }` |
+| `createPolicy` | `{ type: 'Policy', id: 'LIST' }` |
+| `updatePolicy` | `{ type: 'Policy', id: policyId }` |
+| `deletePolicy` | `{ type: 'Policy', id: policyId }`, `{ type: 'Policy', id: 'LIST' }` |
+| `createDelegation` | `{ type: 'Delegation', id: 'LIST' }`, `{ type: 'User', id: userId }` |
+| `revokeDelegation` | `{ type: 'Delegation', id: delegationId }`, `{ type: 'User', id: userId }` |
+
+Apply this table exhaustively — every mutation endpoint in every feature must have an `invalidatesTags` declaration. A mutation without `invalidatesTags` is a bug.
+
+## No API Calls Inside Components
+
+Enforce via ESLint:
+
+```json
+// .eslintrc
+{
+  "rules": {
+    "no-restricted-imports": ["error", {
+      "patterns": [
+        {
+          "group": ["*/shared/api/apiSlice"],
+          "message": "Do not import apiSlice directly in components. Use the typed hooks exported from each feature's endpoint file."
+        }
+      ]
+    }],
+    "no-restricted-globals": ["error", {
+      "name": "fetch",
+      "message": "Use RTK Query hooks for all API calls. Direct fetch() calls are not permitted in application code."
+    }]
+  }
+}
+```
+
+Components call typed hooks (`useGetRolesQuery`, `useCreateRoleMutation`) — never `apiSlice`, never `fetch`, never `axios`. The hook is the contract; the transport is invisible to the component.
+
+---
+
+# 🔒 Phase 3 — Security
+
+## JWT Storage & Token Refresh
+
+* Access token stored in an **httpOnly cookie** (set by the backend with `Secure`, `SameSite=Strict`). JavaScript cannot read it directly — the browser sends it on every same-origin request automatically.
+* Refresh token also in an httpOnly cookie with a longer `Max-Age`.
+* The React app never stores tokens in `localStorage`, `sessionStorage`, or any JS-accessible variable. Document why (XSS resistance) and include a comment block in the auth slice to prevent future developers from reversing this decision.
+* On app boot, call `GET /api/v1/auth/me` to validate the session. A `200` means the cookie is valid and returns the user profile. A `401` means no valid session — redirect to login.
+* Token refresh is handled transparently inside `fetchBaseQueryWithAuth` (see Phase 2) — no component ever triggers a refresh manually.
+
+## UI-Level RBAC (Authorization)
+
+Implement an `AbilityContext` that:
+
+1. On authenticated mount, calls `POST /api/v1/permissions/check` for the current user's full permission set and caches results via RTK Query (TTL: session lifetime, re-fetched on `rbac:invalidated` SignalR event)
+2. Exposes a `useAbility()` hook returning `can(action: string, resource: string): boolean`
+3. Wraps all mutation-capable UI elements in an `<Authorized action="..." resource="...">` component that either disables or hides the element based on the result
+
+```typescript
+// Usage examples
+<Authorized action="role:create" resource="roles">
+  <Button onClick={openCreateModal}>New role</Button>
+</Authorized>
+
+<Authorized action="tenant:create" resource="tenants" fallback={null}>
+  <TenantCreateButton />
+</Authorized>
+```
+
+The `fallback` prop controls whether the element is hidden (`null`) or rendered as disabled (default). Document when to use each.
+
+**Critical rule**: UI-level RBAC is a UX convenience only — the backend enforces all rules authoritatively. Never skip a backend call because the UI thinks the user lacks permission. The backend will reject unauthorised requests regardless.
+
+## Input Validation & XSS Prevention
+
+* All form inputs validated with Zod schemas before submission via React Hook Form's `resolver`. Define schemas in `/src/features/{feature}/types.ts` alongside TypeScript types.
+* Never use `dangerouslySetInnerHTML`. If rich text is required (policy description), use a sanitised renderer (DOMPurify).
+* All query parameters and route params validated with Zod before use. Never trust URL values directly.
+* Content-Security-Policy headers are set by the backend/CDN, but the React app must not inject inline scripts or dynamic `eval` that would violate a strict CSP.
+* Provide example Zod schemas for: `CreateRoleInput`, `AssignRoleInput`, `CreatePolicyInput`, `CreateDelegationInput`.
+
+---
+
+# 🧩 Phase 4 — Component Architecture
+
+## State Ownership Model
+
+| Data type | Owner | Example |
+|---|---|---|
+| Server data (roles, users, policies) | RTK Query | `useGetRolesQuery()` |
+| Cached permission checks | RTK Query | `useCheckPermissionQuery()` |
+| Open/closed modal | Zustand | `useRoleEditorStore` |
+| Selected table rows | Zustand | `useUserTableStore` |
+| Active filter values | Zustand | `useAuditLogFilterStore` |
+| Form field values | React Hook Form | `useForm<CreateRoleInput>()` |
+| Local toggle (e.g. show password) | `useState` | component-local only |
+
+## Component Views
+
+Deliver a full component tree, TypeScript prop interfaces, and hook usage for each of the following views:
+
+### Role Editor
+Create/edit a role: name input, description textarea, permission checkbox matrix grouped by resource category, scope selector (org → dept → project tree picker). On save: `useCreateRoleMutation` or `useUpdateRoleMutation`. Optimistic update pattern: update the RTK Query cache immediately, revert on error. Show a diff summary before confirming edits to an existing role (permissions added in green, removed in red).
+
+### Permission Matrix View
+Read-only grid: roles as columns, permissions as rows, grouped by resource. Scope filter at the top. Tick marks with colour coding (directly assigned vs. inherited). Click a cell to open a detail popover showing which scope granted this permission and when. Export to CSV button.
+
+### User-Role Assignment
+User search (debounced, calls `GET /api/v1/tenants/{tid}/users?search=`), role multi-select dropdown, scope tree picker, effective-date + expiry-date date pickers with validation (expiry must be after effective date). Preview card showing what access the user will have after assignment. Submit via `useAssignRoleToUserMutation`.
+
+### Policy Builder UI
+Visual JSON condition tree composer: add condition node (attribute selector, operator dropdown, value input), add logical group (`AND` / `OR`), drag to reorder, delete node. Live preview pane showing the generated JSON. "Test policy" panel: input a sample `EvaluationContext` as JSON and call `POST /api/v1/tenants/{tid}/policies/evaluate` to preview the result inline.
+
+### Delegation Manager
+Create delegation: delegatee user search, permissions subset multi-select (only permissions the current user holds), date range picker (start + end). Active delegations list with remaining time badge, revoke button with confirmation dialog. Delegation chain depth indicator (warn if approaching configured max).
+
+### Audit Log Viewer
+Filterable, virtualised table (TanStack Virtual — required for 10k+ rows). Filters: date range, userId, action, resourceId, result (`Granted` / `Denied`) — all filter state in Zustand (`useAuditLogFilterStore`). Row expand for full `AccessResult` JSON detail. CSV export via `Accept: text/csv` header. Shareable URL: filters serialised to query params so a filtered view can be bookmarked or shared.
+
+### Tenant Dashboard
+Summary metric cards: active users, active roles, active policies, denial rate (last 24h). Denial rate sparkline chart (last 7 days, daily granularity). Recent audit activity feed (last 10 entries, auto-refreshed via SignalR). Quick-action buttons: invite user, create role, view all denials.
+
+### Notification Centre
+Bell icon in the top nav bar. Dropdown feed showing real-time events scoped to the current admin: delegation requests awaiting action, role changes affecting the admin's own assignments, policy evaluation alerts. Each notification links to the relevant view. Unread count badge clears on open. Fetched via RTK Query on mount; live-updated via `rbac:invalidated` SignalR push.
+
+## Shared Components
+
+Provide implementation for:
+
+* `<Authorized action resource fallback>` — RBAC gate (see Phase 3)
+* `<Skeleton rows cols>` — placeholder during RTK Query `isFetching`
+* `<Toast>` — success / error / warning notifications via a global Zustand `useToastStore`
+* `<ConfirmDialog title description onConfirm>` — reusable confirmation modal backed by Zustand
+* `<ScopeTreePicker value onChange tenantId>` — hierarchical scope selector
+* `<EmptyState icon title description action>` — consistent empty state across all views
+
+---
+
+# 🧭 Phase 5 — UX & Usability
+
+## Loading States
+
+Every RTK Query-backed view must handle all three states explicitly — no component may render without addressing loading and error:
+
+* **Loading** — show a `<Skeleton>` that matches the shape of the loaded content (table skeleton, card skeleton, etc.). Never show a full-page spinner for partial data loads.
+* **Error** — show an inline error banner with the error message and a "Retry" button that calls `refetch()`. For global failures (network down), show a persistent top banner.
+* **Empty** — show an `<EmptyState>` with context-aware guidance (e.g. "No roles yet — create your first role to get started" with a CTA button).
+
+## Success & Error Feedback (Toasts)
+
+All mutations must produce feedback via the global `useToastStore`:
+
+* On success: green toast, auto-dismiss after 4 seconds, message describes what changed (e.g. "Role 'Viewer' created successfully")
+* On error: red toast, persists until dismissed, includes the error code and a human-readable message mapped from API error codes. Never show raw stack traces or internal error messages.
+* On optimistic update rollback: amber toast explaining the action failed and was undone
+
+## Guided Onboarding Wizard
+
+On first login for a new tenant admin (detected via `onboardingCompleted: false` in the `/auth/me` response), present a dismissible step-by-step overlay wizard:
+
+1. **Create your first role** — opens Role Editor inline, pre-filled with a `tenant-admin` template
+2. **Assign permissions** — walks through the permission matrix with tooltips explaining each category
+3. **Add a user** — opens User-Role Assignment view, assigns the new role to an invited user
+
+Wizard state (current step, completed) is held in Zustand (`useOnboardingStore`) and synced to the backend on completion via `PATCH /api/v1/tenants/{tid}/users/{uid}/onboarding`. The wizard is re-launchable from the Tenant Dashboard at any time.
+
+## Accessibility (WCAG 2.1 AA)
+
+* Full keyboard navigation — every interactive element reachable and operable via Tab / Shift+Tab / Enter / Space / arrow keys. Focus order follows visual reading order.
+* ARIA labels on all icon-only buttons, status badges, and data table column headers. Use `role="status"` on live permission-check result areas.
+* Colour contrast — all text/background combinations meet a minimum 4.5:1 ratio (normal text) and 3:1 (large text / UI components). Never rely on colour alone to convey state — pair with an icon or text label.
+* `axe-core` integrated into the Playwright E2E suite to automatically catch accessibility regressions on every CI run.
+
+---
+
+# 🔁 Phase 6 — Real-Time Updates
+
+## SignalR Integration
+
+Implement a `useSignalR` hook in `/src/shared/hooks/useSignalR.ts` that:
+
+1. Connects to `wss://{host}/hubs/rbac` on authenticated mount, passing the session cookie for auth
+2. Subscribes to `rbac:invalidated` events scoped to the current `tenantId`
+3. On receipt of an `rbac:invalidated` event, dispatches RTK Query tag invalidations for the affected entity types (role, policy, user, delegation, notification)
+4. Resets Zustand stores that hold selections or filter state referencing the invalidated entity to prevent stale UI
+5. Reconnects automatically with exponential backoff on disconnect (max 5 retries, then shows a "connection lost" banner)
+
+Provide the complete TypeScript implementation of `useSignalR`.
+
+## Optimistic Updates
+
+Implement optimistic updates for high-frequency mutations: role assignment, role revocation, delegation revocation. Pattern: use RTK Query's `onQueryStarted` with `updateQueryData` to update the cache immediately, then revert via `patchResult.undo()` if the server returns an error. Show an amber toast on rollback.
+
+---
+
+# 🧪 Phase 7 — Testing
+
+## E2E Test Suite (Playwright)
+
+Organise tests using the Page Object Model. Define page objects for each major view in `/src/test/pages/`. Cover the following critical flows at minimum:
+
+* **Authentication** — login with valid credentials, expired token (expect redirect), wrong tenant (expect 403)
+* **Role management** — create role, assign permissions, edit role name, soft-delete role, verify deleted role absent from assignment picker
+* **User-role assignment** — assign role with scope, verify effective permissions via check endpoint, revoke and re-verify
+* **Policy builder** — compose a two-condition policy, trigger a permission check that evaluates it, verify result
+* **Delegation flow** — create time-bound delegation, verify delegatee access, expire delegation, verify access revoked
+* **Audit log** — perform three admin actions, verify all three entries appear with correct fields
+* **Accessibility** — run `axe-core` scan on every major view, assert zero violations
+
+Run Playwright tests in CI against the full Docker Compose stack (Postgres + Redis + API + React app). All tests must be fully deterministic — use seeded fixture data, no shared mutable state between tests.
+
+## API Mocking with MSW
+
+Use MSW for two distinct purposes:
+
+* **Local development** — define handlers in `/src/mocks/handlers.ts` mirroring every RTK Query endpoint. Seed realistic fixture data (multi-tenant, multiple roles, sample audit log entries, active delegations) so all views are fully navigable without a running backend.
+* **Component and integration tests** — override individual MSW handlers per test to simulate edge cases: empty states, `403` responses, slow responses (test loading skeletons), partial policy evaluation errors (test error states). Use `server.use(...)` for per-test overrides and `server.resetHandlers()` in `afterEach`.
+
+Provide an example handler file and an example Vitest test that uses MSW overrides.
+
+## Unit & Integration Tests (Vitest + React Testing Library)
+
+* Every custom hook must have unit tests covering its state transitions and side effects
+* Every `<Authorized>` usage must have a test asserting the element is absent when the permission is denied and present when granted
+* Every form component must have tests for: valid submit, validation error display, server error display
+* RTK Query endpoint tests: mock the network layer with MSW, assert correct cache tags are set and invalidated
+
+---
+
+# 📡 Phase 8 — Observability
+
+## User Action Logging
+
+Track all significant admin actions client-side and send to the backend audit endpoint `POST /api/v1/tenants/{tid}/audit-logs/ui-events`. Events to track: page navigation, role create/edit/delete initiated, user assignment initiated, policy builder save, delegation create/revoke, CSV export, wizard step completion. Implement as a thin `useAnalytics` hook wrapping RTK Query mutation calls — do not instrument raw click handlers.
+
+```typescript
+// /src/shared/hooks/useAnalytics.ts
+export function useTrackEvent() {
+  return (event: UiAuditEvent) => {
+    // fire-and-forget RTK Query mutation
+  };
+}
+```
+
+## Frontend Error Tracking
+
+Integrate an error boundary at the route level (`/src/app/router.tsx`) that:
+
+* Catches React render errors and displays a user-friendly fallback UI (not a blank screen)
+* Reports the error, component stack, current route, and `correlationId` to the backend error endpoint `POST /api/v1/errors/frontend`
+* Never exposes internal stack traces or component names to the user-facing UI
+
+Additionally, intercept all unhandled promise rejections (`window.addEventListener('unhandledrejection', ...)`) and route them through the same error reporter.
+
+## API Failure & Latency Monitoring
+
+RTK Query's `rtkQueryErrorLogger` middleware must:
+
+* Log every API failure to the console in development with: endpoint name, status code, error body, `correlationId`
+* In production, send failures to `POST /api/v1/errors/frontend` if status >= 500 or if the request timed out
+* Track API response latency client-side: wrap `fetchBaseQueryWithAuth` to record `performance.now()` before and after each call and emit a `UiMetricEvent` for any call exceeding 2000ms
+
+Provide the complete middleware implementation.
+
+---
+
+# ✅ Cross-Cutting Requirements
+
+## Code Quality
+
+* TypeScript strict mode (`"strict": true`) — no `any`, no non-null assertions without a comment justifying them
+* ESLint with: `@typescript-eslint/recommended`, `eslint-plugin-react-hooks`, `no-restricted-imports` rule blocking direct `fetch`/`axios` outside `/shared/api`
+* Prettier for formatting — enforced in CI (`prettier --check`)
+* Absolute imports via Vite path aliases (`@/features/...`, `@/shared/...`) — no relative `../../` imports crossing feature boundaries
+
+## Performance
+
+* All route-level components lazy-loaded via `React.lazy` + `Suspense`
+* TanStack Virtual for all tables rendering more than 100 rows
+* RTK Query `keepUnusedDataFor` set per endpoint based on data volatility (roles: 300s, audit logs: 30s, notifications: 10s)
+* Debounce all search inputs (300ms) before triggering RTK Query queries
+
+## Security Checklist (Frontend)
+
+* No tokens in `localStorage` or `sessionStorage`
+* No `dangerouslySetInnerHTML` usage
+* All user-supplied values validated with Zod before submission
+* CSP-compatible code — no inline scripts, no `eval`
+* `axe-core` accessibility scans in CI
+* Dependency audit (`npm audit`) run in CI — fail on high/critical vulnerabilities
+
+---
+
+Generate each phase as a complete, implementation-ready output. Include TypeScript interfaces, hook signatures, component prop types, store shapes, Zod schemas, MSW handler examples, and configuration snippets wherever they add clarity. Do not produce high-level summaries — produce the actual design artifacts a senior React developer can implement directly from.
