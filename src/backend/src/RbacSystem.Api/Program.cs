@@ -94,6 +94,20 @@ builder.Services.AddScoped<ITenantContext, HttpTenantContext>();
 // ── OpenTelemetry (tracing → Jaeger, metrics → Prometheus /metrics) ──────────
 builder.Services.AddRbacObservability(builder.Configuration);
 
+// ── CORS ─────────────────────────────────────────────────────────────────────
+// AllowCredentials() is required so the browser sends httpOnly auth cookies.
+// WithOrigins must list explicit origins — wildcards are incompatible with credentials.
+var allowedOrigins = builder.Configuration
+    .GetSection("Cors:AllowedOrigins")
+    .Get<string[]>() ?? ["http://localhost:5173"];
+
+builder.Services.AddCors(options =>
+    options.AddPolicy("FrontendDev", policy =>
+        policy.WithOrigins(allowedOrigins)
+              .AllowAnyHeader()
+              .AllowAnyMethod()
+              .AllowCredentials()));
+
 // ── SignalR ───────────────────────────────────────────────────────────────────
 builder.Services.AddSignalR();
 
@@ -175,6 +189,10 @@ var app = builder.Build();
 app.UseMiddleware<GlobalExceptionMiddleware>();
 
 app.UseHttpsRedirection();
+
+// CORS must run before UseAuthentication so preflight OPTIONS requests are
+// handled without a JWT. The named policy matches the registered AllowedOrigins.
+app.UseCors("FrontendDev");
 
 // Security headers (OWASP hardening)
 app.Use(async (ctx, next) =>
