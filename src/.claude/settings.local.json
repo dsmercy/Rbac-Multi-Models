@@ -32,7 +32,22 @@
       "Bash(PGPASSWORD=root \"/c/Program Files/PostgreSQL/18/bin/psql\" -h localhost -U postgres -d rbac_multi_model -c \"SELECT \"\"Id\"\", \"\"DelegatorId\"\", \"\"DelegateeId\"\", \"\"ScopeId\"\", \"\"Status\"\", \"\"PermissionIds\"\" FROM delegation.\"\"Delegations\"\" LIMIT 5;\")",
       "Bash(PGPASSWORD=root \"/c/Program Files/PostgreSQL/18/bin/psql\" -h localhost -U postgres -d rbac_multi_model -c \"\\\\d delegation.\"\"Delegations\"\"\")",
       "Bash(PGPASSWORD=root \"/c/Program Files/PostgreSQL/18/bin/psql\" -h localhost -U postgres -d rbac_multi_model -c \"SELECT \"\"Id\"\", \"\"DelegatorId\"\", \"\"DelegateeId\"\", \"\"ScopeId\"\", \"\"IsRevoked\"\", permission_codes FROM delegation.\"\"Delegations\"\" LIMIT 5;\")",
-      "Bash(PGPASSWORD=root \"/c/Program Files/PostgreSQL/18/bin/psql\" -h localhost -U postgres -d rbac_multi_model -c \"SELECT p.\"\"Code\"\" FROM rbac.\"\"RolePermissions\"\" rp JOIN rbac.\"\"Permissions\"\" p ON rp.\"\"PermissionId\"\" = p.\"\"Id\"\" WHERE rp.\"\"RoleId\"\" = ''feeaa4e6-1be0-490b-835f-406560e895d7'' ORDER BY p.\"\"Code\"\";\")"
+      "Bash(PGPASSWORD=root \"/c/Program Files/PostgreSQL/18/bin/psql\" -h localhost -U postgres -d rbac_multi_model -c \"SELECT p.\"\"Code\"\" FROM rbac.\"\"RolePermissions\"\" rp JOIN rbac.\"\"Permissions\"\" p ON rp.\"\"PermissionId\"\" = p.\"\"Id\"\" WHERE rp.\"\"RoleId\"\" = ''feeaa4e6-1be0-490b-835f-406560e895d7'' ORDER BY p.\"\"Code\"\";\")",
+      "Bash(dotnet restore:*)",
+      "Bash(python3 -c ':*)",
+      "Bash(node -e ':*)",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" https://localhost:7001/api/v1/auth/login -k -X POST -H \"Content-Type: application/json\" -d '{\"email\":\"admin@acme.com\",\"password\":\"Admin@123\"}')",
+      "Bash(dotnet run:*)",
+      "Bash(echo \"PID=$!\")",
+      "Bash(netstat -ano)",
+      "Bash(curl -sk https://localhost:51090/api/v1/auth/login -X POST -H \"Content-Type: application/json\" -d '{\"email\":\"admin@acme.com\",\"password\":\"Admin@123\"}' -w \"\\\\nHTTP %{http_code}\")",
+      "Bash(curl -sk https://localhost:51090/api/v1/auth/login -X POST -H \"Content-Type: application/json\" -d '{\"email\":\"admin@acme.test\",\"password\":\"Seed@Test123!\"}' -w \"\\\\nHTTP %{http_code}\")",
+      "Bash(npm create:*)",
+      "Bash(npm install:*)",
+      "Bash(npm run:*)",
+      "Bash(taskkill //F //IM dotnet.exe)",
+      "Bash(curl -sk https://localhost:51090/api/v1/auth/login -o /dev/null -w \"%{http_code}\")",
+      "Bash(curl -s http://localhost:5173 -o /dev/null -w \"%{http_code}\")"
     ]
   }
 }
