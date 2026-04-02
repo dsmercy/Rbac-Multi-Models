@@ -200,6 +200,28 @@ public sealed class UsersController : ControllerBase
         return Ok(result);
     }
 
+    /// <summary>Mark onboarding as completed for a user.</summary>
+    /// <remarks>
+    /// Called by the frontend when the setup wizard is completed or dismissed.
+    /// This is a best-effort call — the frontend persists completion state locally
+    /// and uses this endpoint to sync with the backend for audit purposes.
+    /// </remarks>
+    /// <param name="tid">Tenant UUID.</param>
+    /// <param name="uid">User UUID.</param>
+    /// <response code="204">Onboarding marked complete.</response>
+    /// <response code="401">Missing or invalid JWT.</response>
+    /// <response code="403">Tenant ID mismatch.</response>
+    [HttpPatch("{uid:guid}/onboarding")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status403Forbidden)]
+    public IActionResult CompleteOnboarding(Guid tid, Guid uid)
+    {
+        // Onboarding completion is currently tracked client-side.
+        // This endpoint exists for future server-side persistence and audit logging.
+        return NoContent();
+    }
+
     private Guid GetCallerId()
     {
         var claim = User.FindFirst("sub")?.Value;

@@ -49,6 +49,7 @@ export default function UserListPage() {
           value={search}
           onChange={handleSearchChange}
           placeholder="Search by email or name…"
+          aria-label="Search users"
           className="w-full max-w-sm border rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
         />
       </div>
@@ -130,6 +131,7 @@ export default function UserListPage() {
                 <button
                   onClick={() => setPage((p) => Math.max(1, p - 1))}
                   disabled={page === 1}
+                  aria-label="Previous page"
                   className="px-3 py-1.5 border rounded-md hover:bg-accent disabled:opacity-40 disabled:cursor-not-allowed"
                 >
                   Previous
@@ -137,6 +139,7 @@ export default function UserListPage() {
                 <button
                   onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
                   disabled={page === totalPages}
+                  aria-label="Next page"
                   className="px-3 py-1.5 border rounded-md hover:bg-accent disabled:opacity-40 disabled:cursor-not-allowed"
                 >
                   Next

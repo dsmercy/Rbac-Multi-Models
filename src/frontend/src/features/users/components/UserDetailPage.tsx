@@ -23,7 +23,7 @@ export default function UserDetailPage() {
   const [revokingRoleId, setRevokingRoleId] = useState<string | null>(null);
   const [showAssignForm, setShowAssignForm] = useState(false);
 
-  const { data: user, isLoading } = useGetUserByIdQuery(
+  const { data: user, isLoading, isError, refetch } = useGetUserByIdQuery(
     { tenantId: tenantId!, userId: userId! },
     { skip: !tenantId || !userId || userId === 'new' }
   );
@@ -78,6 +78,17 @@ export default function UserDetailPage() {
       <div className="p-6 space-y-4">
         <SkeletonBlock className="h-6 w-48" />
         <SkeletonBlock className="h-32 w-full" />
+      </div>
+    );
+  }
+
+  if (isError) {
+    return (
+      <div className="p-6">
+        <div className="border border-red-200 bg-red-50 text-red-700 rounded-md px-4 py-3 text-sm flex justify-between">
+          <span>Failed to load user.</span>
+          <button onClick={() => void refetch()} className="underline">Retry</button>
+        </div>
       </div>
     );
   }

@@ -6,10 +6,20 @@ import RouteGuard from '@/shared/components/RouteGuard';
 import TenantLayout from '@/shared/components/TenantLayout';
 import NotFoundPage from '@/shared/components/NotFoundPage';
 import { Skeleton } from '@/shared/components/Skeleton';
+import { ErrorBoundary } from '@/shared/components/ErrorBoundary';
 
 const LoginPage = lazy(() => import('@/features/auth/components/LoginPage'));
-const OnboardingWizard = lazy(() => import('@/features/onboarding/components/OnboardingWizard'));
 const DashboardPage = lazy(() => import('@/shared/components/DashboardPage'));
+
+function PageShell({ children }: { children: React.ReactNode }) {
+  return (
+    <ErrorBoundary>
+      <Suspense fallback={<Skeleton />}>
+        {children}
+      </Suspense>
+    </ErrorBoundary>
+  );
+}
 
 export const router = createBrowserRouter([
   {
@@ -35,26 +45,18 @@ export const router = createBrowserRouter([
       {
         path: 'dashboard',
         element: (
-          <Suspense fallback={<Skeleton />}>
+          <PageShell>
             <DashboardPage />
-          </Suspense>
-        ),
-      },
-      {
-        path: 'onboarding',
-        element: (
-          <Suspense fallback={<Skeleton />}>
-            <OnboardingWizard />
-          </Suspense>
+          </PageShell>
         ),
       },
       ...tenantRoutes.map((route) => ({
         path: route.path,
         element: (
           <RouteGuard guard={route.guard}>
-            <Suspense fallback={<Skeleton />}>
+            <PageShell>
               <route.component />
-            </Suspense>
+            </PageShell>
           </RouteGuard>
         ),
       })),

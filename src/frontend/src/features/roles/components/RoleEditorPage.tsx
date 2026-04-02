@@ -22,7 +22,7 @@ export default function RoleEditorPage() {
   const toast = useToastStore();
   const isEdit = roleId !== 'new';
 
-  const { data: role, isLoading: roleLoading } = useGetRoleByIdQuery(
+  const { data: role, isLoading: roleLoading, isError: roleError, refetch: refetchRole } = useGetRoleByIdQuery(
     { tenantId: tenantId!, roleId: roleId! },
     { skip: !isEdit || !tenantId || !roleId }
   );
@@ -77,13 +77,13 @@ export default function RoleEditorPage() {
     return grouped;
   }, [allPermissions]);
 
-  const handlePermissionToggle = async (permissionId: string, checked: boolean) => {
+  const handlePermissionToggle = async (permissionCode: string, checked: boolean) => {
     if (!isEdit || !tenantId || !roleId) return;
     try {
       if (checked) {
-        await assignPermission({ tenantId, roleId, permissionId }).unwrap();
+        await assignPermission({ tenantId, roleId, permissionCode }).unwrap();
       } else {
-        await revokePermission({ tenantId, roleId, permissionId }).unwrap();
+        await revokePermission({ tenantId, roleId, permissionCode }).unwrap();
       }
     } catch {
       toast.error('Permission update failed', 'Could not update permission. Please try again.');
@@ -91,6 +91,17 @@ export default function RoleEditorPage() {
   };
 
   const isLoading = isEdit && roleLoading;
+
+  if (isEdit && roleError) {
+    return (
+      <div className="p-6">
+        <div className="border border-red-200 bg-red-50 text-red-700 rounded-md px-4 py-3 text-sm flex justify-between">
+          <span>Failed to load role.</span>
+          <button onClick={() => void refetchRole()} className="underline">Retry</button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="p-6 max-w-3xl space-y-6">
@@ -201,7 +212,7 @@ export default function RoleEditorPage() {
                             type="checkbox"
                             checked={assignedIds.has(perm.id)}
                             disabled={role?.isSystem}
-                            onChange={(e) => void handlePermissionToggle(perm.id, e.target.checked)}
+                            onChange={(e) => void handlePermissionToggle(perm.code, e.target.checked)}
                             className="rounded"
                           />
                           <span>{perm.action}</span>

@@ -117,6 +117,7 @@ export default function PolicyListPage() {
                     }>
                       <button
                         onClick={() => void handleToggleActive(policy)}
+                        aria-label={policy.isActive ? `Deactivate policy ${policy.name}` : `Activate policy ${policy.name}`}
                         className={`text-xs px-2 py-0.5 rounded-full border transition-colors ${
                           policy.isActive
                             ? 'bg-blue-100 text-blue-700 border-blue-200 hover:bg-blue-200'

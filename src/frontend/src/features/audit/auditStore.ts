@@ -1,5 +1,6 @@
 import { create } from 'zustand';
-import type { AuditLogFilters, AccessDecision } from './types';
+import type { AuditLogFilters } from './types';
+import type { AccessDecision } from '@/shared/types';
 
 interface AuditLogFilterStore {
   filters: AuditLogFilters;

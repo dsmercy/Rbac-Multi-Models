@@ -1,12 +1,16 @@
-import { useEffect } from 'react';
+import { useEffect, lazy, Suspense } from 'react';
 import { NavLink, Outlet, useNavigate, useParams } from 'react-router-dom';
 import { useAppDispatch, useAppSelector } from '@/app/hooks';
 import { setTenantId, logout } from '@/features/auth/authSlice';
 import { useLogoutMutation } from '@/features/auth/authEndpoints';
 import { AbilityProvider } from '@/shared/contexts/AbilityContext';
+import { useOnboardingStore } from '@/features/onboarding/onboardingStore';
 import { cn } from '@/shared/utils/cn';
 
+const OnboardingWizard = lazy(() => import('@/features/onboarding/components/OnboardingWizard'));
+
 const navItems = [
+  { label: 'Dashboard', path: 'dashboard' },
   { label: 'Roles', path: 'roles' },
   { label: 'Permissions', path: 'permissions' },
   { label: 'Users', path: 'users' },
@@ -23,6 +27,7 @@ const navItems = [
  * 2. Wraps all children in AbilityProvider — permission checks are available
  *    to every page component and the <Authorized> gate without prop drilling
  * 3. Renders sidebar nav + <Outlet /> for child routes
+ * 4. Auto-shows the onboarding wizard for new tenants
  */
 export default function TenantLayout() {
   const dispatch = useAppDispatch();
@@ -30,12 +35,20 @@ export default function TenantLayout() {
   const { tenantId } = useParams<{ tenantId: string }>();
   const user = useAppSelector((s) => s.auth.user);
   const [logoutMutation] = useLogoutMutation();
+  const { isCompleted, open: openWizard, isOpen } = useOnboardingStore();
 
   useEffect(() => {
     if (tenantId) {
       dispatch(setTenantId(tenantId));
     }
   }, [tenantId, dispatch]);
+
+  // Auto-show wizard for users who haven't completed onboarding
+  useEffect(() => {
+    if (user && !isCompleted(user.id)) {
+      openWizard();
+    }
+  }, [user?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleLogout = async () => {
     try {
@@ -47,17 +60,19 @@ export default function TenantLayout() {
   };
 
   return (
-    // AbilityProvider scoped to the tenant — all child routes can call useAbility()
     <AbilityProvider>
       <div className="min-h-screen flex bg-background">
         {/* Sidebar */}
-        <aside className="w-56 flex-shrink-0 border-r bg-card flex flex-col">
+        <aside
+          className="w-56 flex-shrink-0 border-r bg-card flex flex-col"
+          aria-label="Main navigation"
+        >
           <div className="px-4 py-5 border-b">
             <p className="text-sm font-semibold">RBAC Admin</p>
             <p className="text-xs text-muted-foreground truncate">{user?.email}</p>
           </div>
 
-          <nav className="flex-1 px-2 py-3 space-y-0.5">
+          <nav className="flex-1 px-2 py-3 space-y-0.5" aria-label="Tenant navigation">
             {navItems.map((item) => (
               <NavLink
                 key={item.path}
@@ -70,13 +85,23 @@ export default function TenantLayout() {
                       : 'text-foreground hover:bg-accent hover:text-accent-foreground'
                   )
                 }
+                aria-current={undefined}
               >
                 {item.label}
               </NavLink>
             ))}
           </nav>
 
-          <div className="px-4 py-3 border-t">
+          <div className="px-4 py-3 border-t space-y-2">
+            {user && isCompleted(user.id) && (
+              <button
+                onClick={openWizard}
+                className="w-full text-left text-xs text-muted-foreground hover:text-foreground transition-colors"
+                aria-label="Re-open setup wizard"
+              >
+                Get started guide
+              </button>
+            )}
             <button
               onClick={handleLogout}
               className="w-full text-left text-sm text-muted-foreground hover:text-foreground transition-colors"
@@ -87,10 +112,17 @@ export default function TenantLayout() {
         </aside>
 
         {/* Main content */}
-        <main className="flex-1 overflow-auto">
+        <main className="flex-1 overflow-auto" id="main-content">
           <Outlet />
         </main>
       </div>
+
+      {/* Onboarding wizard overlay — rendered at layout level so it covers the full viewport */}
+      {isOpen && (
+        <Suspense fallback={null}>
+          <OnboardingWizard />
+        </Suspense>
+      )}
     </AbilityProvider>
   );
 }

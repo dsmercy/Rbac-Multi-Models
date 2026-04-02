@@ -44,6 +44,7 @@ function NotificationItem({
       {!notification.isRead && (
         <button
           onClick={() => onMarkRead(notification.id)}
+          aria-label={`Mark notification "${notification.title}" as read`}
           className="text-xs text-primary underline shrink-0"
         >
           Mark read

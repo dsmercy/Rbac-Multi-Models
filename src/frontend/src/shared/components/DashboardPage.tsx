@@ -1,4 +1,4 @@
-import { useParams } from 'react-router-dom';
+import { useParams, Link } from 'react-router-dom';
 import { useAppSelector } from '@/app/hooks';
 import { useGetRolesQuery } from '@/features/roles/roleEndpoints';
 import { useGetUsersQuery } from '@/features/users/userEndpoints';
@@ -59,7 +59,7 @@ export default function DashboardPage() {
       </div>
 
       {/* Summary stats */}
-      <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+      <div className="grid grid-cols-2 gap-4 sm:grid-cols-4" role="status" aria-label="Tenant summary statistics">
         <StatCard
           label="Users"
           value={usersPage?.totalCount}
@@ -98,13 +98,13 @@ export default function DashboardPage() {
             { label: 'Delegations', path: `/${tenantId}/delegations` },
             { label: 'Audit logs', path: `/${tenantId}/audit` },
           ].map(({ label, path }) => (
-            <a
+            <Link
               key={path}
-              href={path}
+              to={path}
               className="px-3 py-2 border rounded-md hover:bg-accent transition-colors text-center"
             >
               {label}
-            </a>
+            </Link>
           ))}
         </div>
       </div>

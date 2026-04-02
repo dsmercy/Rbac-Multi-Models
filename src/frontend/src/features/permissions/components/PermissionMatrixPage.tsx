@@ -16,10 +16,10 @@ function RolePermissionCell({ tenantId, roleId, permissionId }: { tenantId: stri
   const { data: rolePerms = [] } = useGetRolePermissionsQuery({ tenantId, roleId });
   const has = rolePerms.some((p) => p.id === permissionId);
   return (
-    <td className="px-4 py-3 text-center">
+    <td className="px-4 py-3 text-center" role="cell">
       {has
-        ? <span className="inline-block w-4 h-4 rounded-full bg-green-500" title="Granted" />
-        : <span className="inline-block w-4 h-4 rounded-full bg-muted" title="Not granted" />}
+        ? <span className="inline-block w-4 h-4 rounded-full bg-green-500" role="img" aria-label="Granted" />
+        : <span className="inline-block w-4 h-4 rounded-full bg-muted" role="img" aria-label="Not granted" />}
     </td>
   );
 }

@@ -38,11 +38,13 @@ function ConditionLeafEditor({
         value={leaf.attribute}
         onChange={(e) => onChange(index, 'attribute', e.target.value)}
         placeholder="attribute (e.g. user.department)"
+        aria-label={`Condition ${index + 1} attribute`}
         className="flex-1 border rounded px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-ring"
       />
       <select
         value={leaf.operator}
         onChange={(e) => onChange(index, 'operator', e.target.value)}
+        aria-label={`Condition ${index + 1} operator`}
         className="border rounded px-2 py-1 text-xs bg-background focus:outline-none focus:ring-1 focus:ring-ring"
       >
         <option value="Equals">Equals</option>
@@ -57,15 +59,16 @@ function ConditionLeafEditor({
         value={String(leaf.value)}
         onChange={(e) => onChange(index, 'value', e.target.value)}
         placeholder="value"
+        aria-label={`Condition ${index + 1} value`}
         className="flex-1 border rounded px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-ring"
       />
       <button
         type="button"
         onClick={() => onRemove(index)}
         className="text-red-500 hover:text-red-700 text-sm px-1"
-        title="Remove condition"
+        aria-label="Remove condition"
       >
-        ×
+        <span aria-hidden>×</span>
       </button>
     </div>
   );
@@ -80,7 +83,7 @@ export default function PolicyBuilderPage() {
   const [jsonError, setJsonError] = useState<string | null>(null);
   const [showJson, setShowJson] = useState(false);
 
-  const { data: policy, isLoading } = useGetPolicyByIdQuery(
+  const { data: policy, isLoading, isError, refetch } = useGetPolicyByIdQuery(
     { tenantId: tenantId!, policyId: policyId! },
     { skip: !isEdit || !tenantId || !policyId }
   );
@@ -154,6 +157,17 @@ export default function PolicyBuilderPage() {
     );
   }
 
+  if (isEdit && isError) {
+    return (
+      <div className="p-6">
+        <div className="border border-red-200 bg-red-50 text-red-700 rounded-md px-4 py-3 text-sm flex justify-between">
+          <span>Failed to load policy.</span>
+          <button onClick={() => void refetch()} className="underline">Retry</button>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="p-6 max-w-3xl space-y-6">
       {/* Header */}
@@ -217,6 +231,7 @@ export default function PolicyBuilderPage() {
                     key={op}
                     type="button"
                     onClick={() => handleOperatorChange(op)}
+                    aria-pressed={conditionTree.operator === op}
                     className={`text-xs px-2 py-1 rounded border transition-colors ${
                       conditionTree.operator === op
                         ? 'bg-primary text-primary-foreground border-primary'

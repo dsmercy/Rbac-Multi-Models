@@ -53,9 +53,9 @@ export const roleEndpoints = apiSlice.injectEndpoints({
       providesTags: (_r, _e, { roleId }) => [{ type: 'Role' as const, id: roleId }],
     }),
 
-    assignPermissionToRole: builder.mutation<void, { tenantId: string; roleId: string; permissionId: string }>({
-      query: ({ tenantId, roleId, permissionId }) => ({
-        url: `/tenants/${tenantId}/roles/${roleId}/permissions/${permissionId}`,
+    assignPermissionToRole: builder.mutation<void, { tenantId: string; roleId: string; permissionCode: string }>({
+      query: ({ tenantId, roleId, permissionCode }) => ({
+        url: `/tenants/${tenantId}/roles/${roleId}/permissions/${encodeURIComponent(permissionCode)}`,
         method: 'POST',
       }),
       invalidatesTags: (_r, _e, { roleId }) => [
@@ -64,9 +64,9 @@ export const roleEndpoints = apiSlice.injectEndpoints({
       ],
     }),
 
-    revokePermissionFromRole: builder.mutation<void, { tenantId: string; roleId: string; permissionId: string }>({
-      query: ({ tenantId, roleId, permissionId }) => ({
-        url: `/tenants/${tenantId}/roles/${roleId}/permissions/${permissionId}`,
+    revokePermissionFromRole: builder.mutation<void, { tenantId: string; roleId: string; permissionCode: string }>({
+      query: ({ tenantId, roleId, permissionCode }) => ({
+        url: `/tenants/${tenantId}/roles/${roleId}/permissions/${encodeURIComponent(permissionCode)}`,
         method: 'DELETE',
       }),
       invalidatesTags: (_r, _e, { roleId }) => [
