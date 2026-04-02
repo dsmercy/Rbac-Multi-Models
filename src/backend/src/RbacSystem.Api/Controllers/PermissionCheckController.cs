@@ -84,8 +84,11 @@ public sealed class PermissionCheckController : ControllerBase
             environmentAttributes: BuildEnvironmentAttributes(),
             tokenVersion: tokenVersion);
 
+        // ResourceId is optional — null means a resource-type-level check (no specific instance).
+        var resourceId = request.ResourceId ?? Guid.Empty;
+
         var result = await _permissionEngine.CanUserAccessAsync(
-            request.UserId, request.Action, request.ResourceId, request.ScopeId, context, ct);
+            request.UserId, request.Action, resourceId, request.ScopeId, context, ct);
 
         return Ok(new PermissionCheckResponse(
             result.IsGranted,
@@ -111,10 +114,15 @@ public sealed record PermissionCheckRequest(
     Guid UserId,
     /// <summary>Action string to check (e.g. <c>users:delete</c>, <c>reports:export</c>).</summary>
     string Action,
-    /// <summary>UUID of the resource being accessed.</summary>
-    Guid ResourceId,
+    /// <summary>
+    /// UUID of the specific resource instance being accessed.
+    /// Omit (null) for resource-type-level checks where no specific instance is targeted.
+    /// </summary>
+    Guid? ResourceId,
     /// <summary>UUID of the scope within which the check is performed.</summary>
     Guid ScopeId,
+    /// <summary>Optional resource type label (informational — used for logging/audit context).</summary>
+    string? ResourceType,
     /// <summary>Optional ABAC user attributes to supplement or override JWT-embedded claims during evaluation.</summary>
     IDictionary<string, object>? UserAttributes,
     /// <summary>Optional ABAC resource attributes used in condition tree evaluation.</summary>
@@ -127,8 +135,6 @@ public sealed record PermissionCheckRequest(
             yield return new("UserId must be a non-empty GUID.", new[] { nameof(UserId) });
         if (string.IsNullOrWhiteSpace(Action))
             yield return new("Action is required.", new[] { nameof(Action) });
-        if (ResourceId == Guid.Empty)
-            yield return new("ResourceId must be a non-empty GUID.", new[] { nameof(ResourceId) });
     }
 }
 

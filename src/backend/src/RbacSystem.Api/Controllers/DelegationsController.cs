@@ -21,6 +21,17 @@ public sealed class DelegationsController : ControllerBase
 
     public DelegationsController(ISender sender) => _sender = sender;
 
+    /// <summary>List all delegations in the tenant.</summary>
+    [HttpGet]
+    [ProducesResponseType(typeof(IReadOnlyList<ActiveDelegationDto>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status403Forbidden)]
+    public async Task<IActionResult> ListDelegations(Guid tid, CancellationToken ct)
+    {
+        var result = await _sender.Send(new ListDelegationsQuery(tid), ct);
+        return Ok(result);
+    }
+
     /// <summary>Retrieve a delegation grant by ID.</summary>
     /// <remarks>Returns the delegation regardless of its current status (active, revoked, or expired).</remarks>
     /// <param name="tid">Tenant UUID.</param>

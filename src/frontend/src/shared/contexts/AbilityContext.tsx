@@ -86,13 +86,12 @@ export function AbilityProvider({ children }: AbilityProviderProps) {
           body: {
             userId: user.id,
             action,
-            resourceId: '*',     // wildcard — UI checks type-level, not instance-level
             resourceType: resource,
             scopeId: tenantId,   // default to tenant root scope
           },
         }).unwrap();
 
-        const granted = result.decision === 'Granted';
+        const granted = result.isGranted;
         cache.current.set(key, granted);
         return granted;
       } catch {

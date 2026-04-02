@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using RbacCore.Application.Commands;
 using RbacCore.Application.Common;
+using RbacCore.Application.Queries;
 
 namespace RbacSystem.Api.Controllers;
 
@@ -20,6 +21,17 @@ public sealed class PermissionsController : ControllerBase
     private readonly ISender _sender;
 
     public PermissionsController(ISender sender) => _sender = sender;
+
+    /// <summary>List all permissions in the tenant's catalogue.</summary>
+    [HttpGet]
+    [ProducesResponseType(typeof(IReadOnlyList<PermissionDto>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status403Forbidden)]
+    public async Task<IActionResult> ListPermissions(Guid tid, CancellationToken ct)
+    {
+        var result = await _sender.Send(new ListPermissionsQuery(tid), ct);
+        return Ok(result);
+    }
 
     /// <summary>Create a new permission in the tenant's catalogue.</summary>
     /// <remarks>

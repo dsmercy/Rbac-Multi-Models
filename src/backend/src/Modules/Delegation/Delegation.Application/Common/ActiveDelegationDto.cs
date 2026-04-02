@@ -9,4 +9,12 @@ public sealed record ActiveDelegationDto(
     Guid ScopeId,
     DateTimeOffset ExpiresAt,
     int ChainDepth,
-    DateTimeOffset CreatedAt);
+    DateTimeOffset CreatedAt,
+    bool IsRevoked = false,
+    DateTimeOffset? RevokedAt = null)
+{
+    public string Status =>
+        IsRevoked ? "Revoked" :
+        ExpiresAt <= DateTimeOffset.UtcNow ? "Expired" :
+        "Active";
+}

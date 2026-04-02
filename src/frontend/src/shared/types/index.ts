@@ -41,38 +41,17 @@ export type DeniedReason =
 export interface CheckPermissionInput {
   userId: string;
   action: string;
-  resourceId: string;
-  resourceType: string;
+  resourceId?: string | null;
+  resourceType?: string;
   scopeId: string;
-}
-
-export interface EvaluatedPolicy {
-  policyId: string;
-  policyName: string;
-  decision: AccessDecision;
-}
-
-export interface EffectiveRole {
-  roleId: string;
-  roleName: string;
-  scopeId: string;
-  inherited: boolean;
-}
-
-export interface DelegationChainEntry {
-  delegationId: string;
-  delegatorId: string;
-  chainDepth: number;
 }
 
 export interface AccessResult {
-  decision: AccessDecision;
-  deniedReason: DeniedReason | null;
-  evaluatedPolicies: EvaluatedPolicy[];
-  effectiveRoles: EffectiveRole[];
-  delegationChainUsed: DelegationChainEntry | null;
+  isGranted: boolean;
+  denialReason: DeniedReason | null;
   cacheHit: boolean;
   evaluationLatencyMs: number;
+  delegationChain: string | null;
 }
 
 // ── API error shape ───────────────────────────────────────────────────────────

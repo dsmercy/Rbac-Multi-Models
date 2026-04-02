@@ -47,7 +47,13 @@
       "Bash(npm run:*)",
       "Bash(taskkill //F //IM dotnet.exe)",
       "Bash(curl -sk https://localhost:51090/api/v1/auth/login -o /dev/null -w \"%{http_code}\")",
-      "Bash(curl -s http://localhost:5173 -o /dev/null -w \"%{http_code}\")"
+      "Bash(curl -s http://localhost:5173 -o /dev/null -w \"%{http_code}\")",
+      "Bash(npx tsc:*)",
+      "Bash(taskkill /F /IM node.exe)",
+      "Bash(cmd /c \"taskkill /F /IM node.exe\")",
+      "Bash(cmd /c \"findstr /s /r /l /c:\\\\\"PagedResult\\\\\" \\\\\"c:\\\\Daya\\\\DotNet\\\\AI Projects\\\\RBAC-multi-models\\\\src\\\\backend\\\\src\\\\*.cs\\\\\" 2>&1 | head -5\")",
+      "Bash(cmd /c \"taskkill /PID 23252 /F\")",
+      "Bash(cmd /c \"taskkill /F /IM dotnet.exe\")"
     ]
   }
 }

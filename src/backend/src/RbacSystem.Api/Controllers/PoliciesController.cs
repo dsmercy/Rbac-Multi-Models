@@ -23,6 +23,17 @@ public sealed class PoliciesController : ControllerBase
 
     public PoliciesController(ISender sender) => _sender = sender;
 
+    /// <summary>List all policies in the tenant.</summary>
+    [HttpGet]
+    [ProducesResponseType(typeof(IReadOnlyList<PolicyDto>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status403Forbidden)]
+    public async Task<IActionResult> ListPolicies(Guid tid, CancellationToken ct)
+    {
+        var result = await _sender.Send(new ListPoliciesQuery(tid), ct);
+        return Ok(result);
+    }
+
     /// <summary>Retrieve a policy by ID.</summary>
     /// <param name="tid">Tenant UUID.</param>
     /// <param name="policyId">Policy UUID.</param>

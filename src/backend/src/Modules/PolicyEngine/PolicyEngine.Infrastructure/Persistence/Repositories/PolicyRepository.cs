@@ -19,6 +19,13 @@ public sealed class PolicyRepository : IPolicyRepository
             .Where(p => p.TenantId == tenantId && p.IsActive)
             .ToListAsync(ct);
 
+    public async Task<IReadOnlyList<Policy>> GetAllByTenantAsync(
+        Guid tenantId, CancellationToken ct = default)
+        => await _context.Policies
+            .Where(p => p.TenantId == tenantId)
+            .OrderByDescending(p => p.CreatedAt)
+            .ToListAsync(ct);
+
     public async Task<IReadOnlyList<Policy>> GetByResourceAsync(
         Guid resourceId, Guid tenantId, CancellationToken ct = default)
         => await _context.Policies

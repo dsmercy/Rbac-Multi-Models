@@ -16,6 +16,9 @@ public interface IDelegationRepository
     Task<IReadOnlyList<DelegationGrant>> GetActiveByDelegatorAsync(
         Guid delegatorId, Guid tenantId, CancellationToken ct = default);
 
+    Task<IReadOnlyList<DelegationGrant>> GetAllByTenantAsync(
+        Guid tenantId, CancellationToken ct = default);
+
     Task AddAsync(DelegationGrant delegation, CancellationToken ct = default);
     Task SaveChangesAsync(CancellationToken ct = default);
 }

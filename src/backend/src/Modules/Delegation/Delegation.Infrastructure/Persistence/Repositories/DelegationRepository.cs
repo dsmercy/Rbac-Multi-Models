@@ -39,6 +39,14 @@ public sealed class DelegationRepository : IDelegationRepository
             .Where(d => d.TenantId == tenantId && d.DelegatorId == delegatorId)
             .ToListAsync(ct);
 
+    public async Task<IReadOnlyList<Domain.Entities.DelegationGrant>> GetAllByTenantAsync(
+        Guid tenantId, CancellationToken ct = default)
+        => await _context.Delegations
+            .IgnoreQueryFilters()
+            .Where(d => d.TenantId == tenantId)
+            .OrderByDescending(d => d.CreatedAt)
+            .ToListAsync(ct);
+
     public async Task AddAsync(
         Domain.Entities.DelegationGrant delegation, CancellationToken ct = default)
         => await _context.Delegations.AddAsync(delegation, ct);

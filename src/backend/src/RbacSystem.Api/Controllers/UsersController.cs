@@ -1,3 +1,4 @@
+using BuildingBlocks.Application;
 using Identity.Application.Commands;
 using Identity.Application.Common;
 using Identity.Application.Queries;
@@ -23,6 +24,22 @@ public sealed class UsersController : ControllerBase
     private readonly ISender _sender;
 
     public UsersController(ISender sender) => _sender = sender;
+
+    /// <summary>List users in the tenant with optional search and pagination.</summary>
+    [HttpGet]
+    [ProducesResponseType(typeof(PagedResult<UserDto>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status403Forbidden)]
+    public async Task<IActionResult> ListUsers(
+        Guid tid,
+        [FromQuery] string? search,
+        [FromQuery] int page = 1,
+        [FromQuery] int pageSize = 20,
+        CancellationToken ct = default)
+    {
+        var result = await _sender.Send(new ListUsersQuery(tid, search, page, pageSize), ct);
+        return Ok(result);
+    }
 
     /// <summary>Create a new user in the tenant.</summary>
     /// <remarks>

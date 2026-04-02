@@ -19,7 +19,7 @@ public sealed class UserRepository : IUserRepository
     public async Task<User?> GetByEmailAsync(
     string email, Guid tenantId, CancellationToken ct = default)
     => await _context.Users
-        .IgnoreQueryFilters()                          // bypass filter — no JWT yet
+        .IgnoreQueryFilters()                          // bypass filter ï¿½ no JWT yet
         .FirstOrDefaultAsync(u =>
             !u.IsDeleted &&
             u.TenantId == tenantId &&
@@ -36,6 +36,31 @@ public sealed class UserRepository : IUserRepository
         => await _context.Users
             .Where(u => ids.Contains(u.Id) && u.TenantId == tenantId)
             .ToListAsync(ct);
+
+    public async Task<(IReadOnlyList<User> Items, int TotalCount)> GetByTenantAsync(
+        Guid tenantId, string? search, int page, int pageSize, CancellationToken ct = default)
+    {
+        var query = _context.Users
+            .IgnoreQueryFilters()
+            .Where(u => !u.IsDeleted && u.TenantId == tenantId);
+
+        if (!string.IsNullOrWhiteSpace(search))
+        {
+            var lower = search.ToLowerInvariant();
+            query = query.Where(u =>
+                u.Email.Value.Contains(lower) ||
+                u.DisplayName.Value.ToLower().Contains(lower));
+        }
+
+        var totalCount = await query.CountAsync(ct);
+        var items = await query
+            .OrderBy(u => u.Email.Value)
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
+            .ToListAsync(ct);
+
+        return (items, totalCount);
+    }
 
     public async Task AddAsync(User user, CancellationToken ct = default)
         => await _context.Users.AddAsync(user, ct);

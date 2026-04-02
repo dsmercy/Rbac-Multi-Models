@@ -72,7 +72,7 @@ export default function LoginPage() {
           <p className="text-sm text-muted-foreground">Sign in to your tenant account</p>
         </div>
 
-        <form onSubmit={handleSubmit(onSubmit)} className="space-y-4" noValidate>
+        <form onSubmit={handleSubmit(onSubmit)} className="space-y-4" noValidate autoComplete="on">
           <div className="space-y-1">
             <label htmlFor="tenantId" className="text-sm font-medium">
               Tenant ID
@@ -82,7 +82,7 @@ export default function LoginPage() {
               {...register('tenantId')}
               className="w-full px-3 py-2 border rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-ring"
               placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
-              autoComplete="off"
+              autoComplete="on"
             />
             {errors.tenantId && (
               <p className="text-xs text-destructive">{errors.tenantId.message}</p>
