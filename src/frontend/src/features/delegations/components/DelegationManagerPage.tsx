@@ -57,7 +57,12 @@ export default function DelegationManagerPage() {
   const onSubmit = async (data: CreateDelegationSchema) => {
     if (!tenantId) return;
     try {
-      await createDelegation({ tenantId, body: { ...data, delegateeUserId: data.delegateeUserId } }).unwrap();
+      const body = {
+        ...data,
+        // Convert datetime-local string ("YYYY-MM-DDTHH:mm") to full ISO 8601
+        expiresAt: new Date(data.expiresAt).toISOString(),
+      };
+      await createDelegation({ tenantId, body }).unwrap();
       toast.success('Delegation created', 'Permissions delegated successfully.');
       setShowForm(false);
       reset();
@@ -181,7 +186,9 @@ export default function DelegationManagerPage() {
             <tbody className="divide-y">
               {delegations.map((d) => (
                 <tr key={d.id} className="hover:bg-muted/30 transition-colors">
-                  <td className="px-4 py-3 font-medium text-xs font-mono">{d.delegateeId.slice(0, 8)}…</td>
+                  <td className="px-4 py-3 font-medium text-sm">
+                    {(() => { const u = users.find((x) => x.id === d.delegateeId); return u ? (u.displayName || u.email) : d.delegateeId.slice(0, 8) + '…'; })()}
+                  </td>
                   <td className="px-4 py-3 text-muted-foreground">{(d.permissionCodes ?? []).length} permission{(d.permissionCodes ?? []).length !== 1 ? 's' : ''}</td>
                   <td className="px-4 py-3">
                     <span className={`text-xs px-2 py-0.5 rounded-full ${STATUS_STYLE[d.status] ?? 'bg-muted text-muted-foreground'}`}>

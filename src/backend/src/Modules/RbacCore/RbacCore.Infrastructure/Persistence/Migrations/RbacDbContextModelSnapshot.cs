@@ -324,10 +324,6 @@ namespace RbacCore.Infrastructure.Persistence.Migrations
 
                             b1.HasKey("PermissionId");
 
-                            b1.HasIndex("Value")
-                                .IsUnique()
-                                .HasDatabaseName("IX_Permissions_Code");
-
                             b1.ToTable("Permissions", "rbac");
 
                             b1.WithOwner()

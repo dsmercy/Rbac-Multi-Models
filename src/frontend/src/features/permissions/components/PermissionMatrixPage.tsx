@@ -33,7 +33,11 @@ function AddPermissionForm({ tenantId, onClose }: { tenantId: string; onClose: (
 
   const onSubmit = async (data: CreatePermissionSchema) => {
     try {
-      await createPermission({ tenantId, body: data }).unwrap();
+      // `action` is already in "resource:verb" format (enforced by the schema regex).
+      // Use it directly as the permission code; split out the verb for the backend's Action field.
+      const code = data.action.trim().toLowerCase();
+      const verb = code.split(':')[1] ?? code;
+      await createPermission({ tenantId, body: { code, action: verb, resourceType: data.resourceType, description: data.description } }).unwrap();
       toast.success('Permission created', `${data.action} on ${data.resourceType} is now available.`);
       onClose();
     } catch {

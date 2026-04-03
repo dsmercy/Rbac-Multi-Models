@@ -29,6 +29,12 @@ export const userEndpoints = apiSlice.injectEndpoints({
       providesTags: (_r, _e, { userId }) => [{ type: 'User' as const, id: userId }],
     }),
 
+    getUserRoleAssignments: builder.query<UserRoleAssignment[], { tenantId: string; userId: string }>({
+      query: ({ tenantId, userId }) => `/tenants/${tenantId}/users/${userId}/roles`,
+      providesTags: (_r, _e, { userId }) => [{ type: 'User' as const, id: `roles-${userId}` }],
+      keepUnusedDataFor: 120,
+    }),
+
     createUser: builder.mutation<User, { tenantId: string; body: CreateUserInput }>({
       query: ({ tenantId, body }) => ({
         url: `/tenants/${tenantId}/users`,
@@ -53,8 +59,51 @@ export const userEndpoints = apiSlice.injectEndpoints({
         method: 'POST',
         body,
       }),
+      // Optimistic update: append the new assignment immediately so the UI
+      // reflects the change before the server responds.
+      // Cast required: updateQueryData can't infer injected endpoint names within injectEndpoints
+      async onQueryStarted({ tenantId, userId, body }, { dispatch, queryFulfilled }) {
+        const tempId = `optimistic-${Date.now()}`;
+        const patchResult = dispatch(
+          (apiSlice.util.updateQueryData as any)(
+            'getUserRoleAssignments',
+            { tenantId, userId },
+            (draft: UserRoleAssignment[]) => {
+              draft.push({
+                id: tempId,
+                tenantId,
+                userId,
+                roleId: body.roleId,
+                roleName: '',           // filled in from server response on success
+                scopeId: body.scopeId,
+                assignedAt: new Date().toISOString(),
+                expiresAt: body.expiresAt ?? null,
+                isActive: true,
+              });
+            },
+          ),
+        );
+        try {
+          const { data: assignment } = await queryFulfilled;
+          // Replace the optimistic placeholder with the real server record
+          dispatch(
+            (apiSlice.util.updateQueryData as any)(
+              'getUserRoleAssignments',
+              { tenantId, userId },
+              (draft: UserRoleAssignment[]) => {
+                const idx = draft.findIndex((a) => a.id === tempId);
+                if (idx !== -1) draft[idx] = assignment;
+              },
+            ),
+          );
+        } catch {
+          // Server rejected — undo the optimistic insert
+          patchResult.undo();
+        }
+      },
       invalidatesTags: (_r, _e, { userId }) => [
         { type: 'User', id: userId },
+        { type: 'User', id: `roles-${userId}` },
         { type: 'Role', id: 'LIST' },
       ],
     }),
@@ -64,7 +113,30 @@ export const userEndpoints = apiSlice.injectEndpoints({
         url: `/tenants/${tenantId}/users/${userId}/roles/${roleId}`,
         method: 'DELETE',
       }),
-      invalidatesTags: (_r, _e, { userId }) => [{ type: 'User', id: userId }],
+      // Optimistic update: mark the assignment inactive immediately so the
+      // revoke is reflected in the UI without waiting for the server round-trip.
+      // Cast required: updateQueryData can't infer injected endpoint names within injectEndpoints
+      async onQueryStarted({ tenantId, userId, roleId }, { dispatch, queryFulfilled }) {
+        const patchResult = dispatch(
+          (apiSlice.util.updateQueryData as any)(
+            'getUserRoleAssignments',
+            { tenantId, userId },
+            (draft: UserRoleAssignment[]) => {
+              const assignment = draft.find((a) => a.roleId === roleId && a.isActive);
+              if (assignment) assignment.isActive = false;
+            },
+          ),
+        );
+        try {
+          await queryFulfilled;
+        } catch {
+          patchResult.undo();
+        }
+      },
+      invalidatesTags: (_r, _e, { userId }) => [
+        { type: 'User', id: userId },
+        { type: 'User', id: `roles-${userId}` },
+      ],
     }),
   }),
   overrideExisting: false,
@@ -73,6 +145,7 @@ export const userEndpoints = apiSlice.injectEndpoints({
 export const {
   useGetUsersQuery,
   useGetUserByIdQuery,
+  useGetUserRoleAssignmentsQuery,
   useCreateUserMutation,
   useUpdateUserMutation,
   useAssignRoleToUserMutation,

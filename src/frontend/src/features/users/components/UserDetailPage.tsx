@@ -4,6 +4,7 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import {
   useGetUserByIdQuery,
+  useGetUserRoleAssignmentsQuery,
   useUpdateUserMutation,
   useAssignRoleToUserMutation,
   useRevokeRoleFromUserMutation,
@@ -28,6 +29,10 @@ export default function UserDetailPage() {
     { skip: !tenantId || !userId || userId === 'new' }
   );
   const { data: roles = [] } = useGetRolesQuery({ tenantId: tenantId! }, { skip: !tenantId });
+  const { data: roleAssignments = [] } = useGetUserRoleAssignmentsQuery(
+    { tenantId: tenantId!, userId: userId! },
+    { skip: !tenantId || !userId || userId === 'new' }
+  );
   const [updateUser, { isLoading: isUpdating }] = useUpdateUserMutation();
   const [assignRole, { isLoading: isAssigning }] = useAssignRoleToUserMutation();
   const [revokeRole, { isLoading: isRevoking }] = useRevokeRoleFromUserMutation();
@@ -52,7 +57,12 @@ export default function UserDetailPage() {
   const handleAssignRole = async (data: AssignRoleSchema) => {
     if (!tenantId || !userId) return;
     try {
-      await assignRole({ tenantId, userId, body: data }).unwrap();
+      const body = {
+        ...data,
+        // Convert datetime-local string ("YYYY-MM-DDTHH:mm") to full ISO 8601
+        expiresAt: data.expiresAt ? new Date(data.expiresAt).toISOString() : undefined,
+      };
+      await assignRole({ tenantId, userId, body }).unwrap();
       toast.success('Role assigned', 'Role has been assigned to the user.');
       setShowAssignForm(false);
       reset();
@@ -189,10 +199,42 @@ export default function UserDetailPage() {
           </form>
         )}
 
-        {/* We'd normally get assignments from a separate endpoint — showing placeholder */}
-        <div className="px-5 py-8 text-center text-sm text-muted-foreground">
-          Role assignments are loaded from the user's profile. Use the assign form above to add roles.
-        </div>
+        {roleAssignments.length === 0 ? (
+          <div className="px-5 py-8 text-center text-sm text-muted-foreground">
+            No roles assigned. Use the form above to assign a role.
+          </div>
+        ) : (
+          <div className="divide-y">
+            {roleAssignments.map((a) => (
+              <div key={a.id} className="px-5 py-3 flex items-center justify-between text-sm">
+                <div>
+                  <p className="font-medium">{a.roleName || a.roleId}</p>
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    Assigned {new Date(a.assignedAt).toLocaleDateString()}
+                    {a.expiresAt ? ` · Expires ${new Date(a.expiresAt).toLocaleDateString()}` : ''}
+                  </p>
+                </div>
+                <div className="flex items-center gap-2">
+                  {a.isActive ? (
+                    <span className="text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded-full">Active</span>
+                  ) : (
+                    <span className="text-xs bg-muted text-muted-foreground px-2 py-0.5 rounded-full">Inactive</span>
+                  )}
+                  {a.isActive && (
+                    <Authorized action="user:update" resource="users" fallback={null}>
+                      <button
+                        onClick={() => setRevokingRoleId(a.roleId)}
+                        className="text-xs px-3 py-1 border border-red-200 text-red-600 rounded hover:bg-red-50 transition-colors"
+                      >
+                        Revoke
+                      </button>
+                    </Authorized>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
 
       <ConfirmDialog

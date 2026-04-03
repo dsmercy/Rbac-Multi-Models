@@ -7,10 +7,15 @@ export const createDelegationSchema = z
       .array(z.string().uuid())
       .min(1, 'Select at least one permission to delegate'),
     scopeId: z.string().uuid('Must select a valid scope'),
-    expiresAt: z.string().datetime({ offset: true, message: 'Expiry date is required' }),
+    // datetime-local inputs produce "YYYY-MM-DDTHH:mm" — validated as a string here;
+    // converted to full ISO 8601 string in the submit handler before API call
+    expiresAt: z.string().min(1, 'Expiry date is required'),
   })
   .refine(
-    (data) => new Date(data.expiresAt) > new Date(),
+    (data) => {
+      const d = new Date(data.expiresAt);
+      return !isNaN(d.getTime()) && d > new Date();
+    },
     { message: 'Expiry date must be in the future', path: ['expiresAt'] }
   );
 

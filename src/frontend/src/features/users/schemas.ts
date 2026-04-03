@@ -13,14 +13,17 @@ export const createUserSchema = z.object({
 
 export const assignRoleSchema = z
   .object({
-    roleId: z.string().uuid('Must select a valid role'),
+    roleId:  z.string().uuid('Must select a valid role'),
     scopeId: z.string().uuid('Must select a valid scope'),
-    expiresAt: z.string().datetime({ offset: true }).optional(),
+    // datetime-local inputs produce "YYYY-MM-DDTHH:mm" — validated as a string here;
+    // converted to full ISO 8601 string in the submit handler before API call
+    expiresAt: z.string().optional(),
   })
   .refine(
     (data) => {
       if (!data.expiresAt) return true;
-      return new Date(data.expiresAt) > new Date();
+      const d = new Date(data.expiresAt);
+      return !isNaN(d.getTime()) && d > new Date();
     },
     { message: 'Expiry date must be in the future', path: ['expiresAt'] }
   );

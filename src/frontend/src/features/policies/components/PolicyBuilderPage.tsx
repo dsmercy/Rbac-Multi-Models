@@ -78,7 +78,8 @@ export default function PolicyBuilderPage() {
   const { tenantId, policyId } = useParams<{ tenantId: string; policyId: string }>();
   const navigate = useNavigate();
   const toast = useToastStore();
-  const isEdit = policyId !== 'new';
+  // policyId is undefined on /policies/new (static route has no :policyId param)
+  const isEdit = !!policyId;
   const [conditionTree, setConditionTree] = useState<ConditionNode>(DEFAULT_CONDITION_TREE);
   const [jsonError, setJsonError] = useState<string | null>(null);
   const [showJson, setShowJson] = useState(false);

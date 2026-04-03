@@ -58,7 +58,7 @@ public sealed class Role : AuditableEntity
         var rp = RolePermission.Create(Id, TenantId, permissionId, grantedByUserId);
         _permissions.Add(rp);
 
-        AddDomainEvent(new PermissionGrantedEvent(Id, TenantId, permissionId, grantedByUserId));
+        AddDomainEvent(new PermissionGrantedEvent(permissionId, TenantId, Id, grantedByUserId));
     }
 
     public void RemovePermission(Guid permissionId, Guid revokedByUserId)
@@ -73,7 +73,7 @@ public sealed class Role : AuditableEntity
 
         _permissions.Remove(rp);
 
-        AddDomainEvent(new PermissionRevokedEvent(Id, TenantId, permissionId, revokedByUserId));
+        AddDomainEvent(new PermissionRevokedEvent(permissionId, TenantId, Id, revokedByUserId));
     }
 
     public void Rename(string newName, string? newDescription, Guid updatedByUserId)

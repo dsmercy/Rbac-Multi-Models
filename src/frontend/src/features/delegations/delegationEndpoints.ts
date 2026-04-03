@@ -34,6 +34,28 @@ export const delegationEndpoints = apiSlice.injectEndpoints({
         url: `/tenants/${tenantId}/delegations/${delegationId}`,
         method: 'DELETE',
       }),
+      // Optimistic update: immediately mark the delegation as Revoked in the
+      // list cache so the UI reflects the change without a server round-trip.
+      // If the server rejects, undo() restores the original status.
+      async onQueryStarted({ tenantId, delegationId }, { dispatch, queryFulfilled }) {
+        const revokedAt = new Date().toISOString();
+        // Cast required: updateQueryData can't infer injected endpoint names within injectEndpoints
+        const patchResult = dispatch(
+          (apiSlice.util.updateQueryData as any)('getDelegations', { tenantId }, (draft: Delegation[]) => {
+            const d = draft.find((item) => item.id === delegationId);
+            if (d) {
+              d.status    = 'Revoked';
+              d.isRevoked = true;
+              d.revokedAt = revokedAt;
+            }
+          }),
+        );
+        try {
+          await queryFulfilled;
+        } catch {
+          patchResult.undo();
+        }
+      },
       invalidatesTags: (_r, _e, { delegationId, delegateeId }) => [
         { type: 'Delegation', id: delegationId },
         { type: 'Delegation', id: 'LIST' },

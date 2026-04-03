@@ -20,7 +20,8 @@ export default function RoleEditorPage() {
   const { tenantId, roleId } = useParams<{ tenantId: string; roleId: string }>();
   const navigate = useNavigate();
   const toast = useToastStore();
-  const isEdit = roleId !== 'new';
+  // roleId is undefined on /roles/new (static route has no :roleId param)
+  const isEdit = !!roleId;
 
   const { data: role, isLoading: roleLoading, isError: roleError, refetch: refetchRole } = useGetRoleByIdQuery(
     { tenantId: tenantId!, roleId: roleId! },

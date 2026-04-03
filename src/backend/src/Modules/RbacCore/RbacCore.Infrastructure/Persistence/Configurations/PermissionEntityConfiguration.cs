@@ -21,10 +21,8 @@ public sealed class PermissionEntityConfiguration : IEntityTypeConfiguration<Per
                 .HasColumnName("Code")
                 .HasMaxLength(100)
                 .IsRequired();
-
-            code.HasIndex(c => c.Value)
-                .HasDatabaseName("IX_Permissions_Code")
-                .IsUnique();
+            // Composite unique index (TenantId, Code) is managed by migration
+            // 20260403000001_FixPermissionCodeUniqueIndex_TenantScoped — not tracked by EF model
         });
 
         builder.Property(p => p.ResourceType).HasMaxLength(100).IsRequired();

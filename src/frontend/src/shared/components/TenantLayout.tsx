@@ -5,6 +5,8 @@ import { setTenantId, logout } from '@/features/auth/authSlice';
 import { useLogoutMutation } from '@/features/auth/authEndpoints';
 import { AbilityProvider } from '@/shared/contexts/AbilityContext';
 import { useOnboardingStore } from '@/features/onboarding/onboardingStore';
+import { useSignalR } from '@/shared/hooks/useSignalR';
+import { ConnectionBanner } from '@/shared/components/ConnectionBanner';
 import { cn } from '@/shared/utils/cn';
 
 const OnboardingWizard = lazy(() => import('@/features/onboarding/components/OnboardingWizard'));
@@ -37,6 +39,10 @@ export default function TenantLayout() {
   const [logoutMutation] = useLogoutMutation();
   const { isCompleted, open: openWizard, isOpen } = useOnboardingStore();
 
+  // Establish SignalR connection for real-time cache invalidation.
+  // Called once per tenant session — hook manages its own lifecycle.
+  useSignalR(tenantId);
+
   useEffect(() => {
     if (tenantId) {
       dispatch(setTenantId(tenantId));
@@ -61,6 +67,9 @@ export default function TenantLayout() {
 
   return (
     <AbilityProvider>
+      {/* Persistent banner — visible above all content when SignalR is down */}
+      <ConnectionBanner />
+
       <div className="min-h-screen flex bg-background">
         {/* Sidebar */}
         <aside

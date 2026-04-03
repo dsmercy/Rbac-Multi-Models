@@ -1,6 +1,7 @@
 import { createContext, useCallback, useRef, useState } from 'react';
 import { useAppSelector } from '@/app/hooks';
 import { useCheckPermissionMutation } from '@/features/permissions/permissionEndpoints';
+import { useGetScopesQuery } from '@/shared/api/scopeEndpoints';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -59,6 +60,14 @@ export function AbilityProvider({ children }: AbilityProviderProps) {
   const tenantId = useAppSelector((s) => s.auth.tenantId);
   const [isLoading, setIsLoading] = useState(false);
 
+  // Resolve the Organization root scope for this tenant.
+  // Permission checks require a valid Scope UUID — the tenant ID is NOT a scope ID.
+  const { data: scopes } = useGetScopesQuery(
+    { tenantId: tenantId! },
+    { skip: !tenantId }
+  );
+  const rootScopeId = scopes?.find((s) => s.type === 'Organization' && !s.parentId)?.id ?? null;
+
   // Ref-based cache: Map<"action::resource", boolean>
   // Using Ref (not state) so cache reads don't trigger re-renders.
   const cache = useRef<Map<string, boolean>>(new Map());
@@ -72,6 +81,9 @@ export function AbilityProvider({ children }: AbilityProviderProps) {
   const check = useCallback(
     async (action: string, resource: string): Promise<boolean> => {
       if (!user || !tenantId) return false;
+
+      // Scopes haven't loaded yet — return optimistic true to avoid hiding controls on first render
+      if (!rootScopeId) return true;
 
       const key = cacheKey(action, resource);
       if (cache.current.has(key)) return cache.current.get(key)!;
@@ -87,7 +99,7 @@ export function AbilityProvider({ children }: AbilityProviderProps) {
             userId: user.id,
             action,
             resourceType: resource,
-            scopeId: tenantId,   // default to tenant root scope
+            scopeId: rootScopeId, // Organization root scope UUID (not tenant UUID)
           },
         }).unwrap();
 
@@ -103,7 +115,7 @@ export function AbilityProvider({ children }: AbilityProviderProps) {
         if (inFlight.current.size === 0) setIsLoading(false);
       }
     },
-    [user, tenantId, checkPermission]
+    [user, tenantId, rootScopeId, checkPermission]
   );
 
   /**

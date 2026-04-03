@@ -230,6 +230,6 @@ app.MapControllers();
 // JS client connects to /api/v1/hubs/rbac?access_token=<jwt>
 app.MapHub<RbacHub>("/api/v1/hubs/rbac");
 
-await app.SeedDevelopmentDataAsync();
+//await app.SeedDevelopmentDataAsync();
 
 app.Run();
