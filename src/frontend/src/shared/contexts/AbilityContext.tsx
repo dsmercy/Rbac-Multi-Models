@@ -82,6 +82,9 @@ export function AbilityProvider({ children }: AbilityProviderProps) {
     async (action: string, resource: string): Promise<boolean> => {
       if (!user || !tenantId) return false;
 
+      // Super-admins have platform-wide access — skip the API check entirely.
+      if (user.isSuperAdmin) return true;
+
       // Scopes haven't loaded yet — return optimistic true to avoid hiding controls on first render
       if (!rootScopeId) return true;
 

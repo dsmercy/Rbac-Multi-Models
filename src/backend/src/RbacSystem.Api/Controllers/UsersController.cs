@@ -187,7 +187,7 @@ public sealed class UsersController : ControllerBase
     /// <response code="401">Missing or invalid JWT.</response>
     /// <response code="403">Tenant ID mismatch.</response>
     [HttpGet("{uid:guid}/roles")]
-    [ProducesResponseType(typeof(IReadOnlyList<RoleDto>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(IReadOnlyList<UserRoleAssignmentDto>), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status403Forbidden)]
     public async Task<IActionResult> GetUserRoles(

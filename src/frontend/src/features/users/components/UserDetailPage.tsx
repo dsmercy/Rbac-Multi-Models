@@ -10,6 +10,7 @@ import {
   useRevokeRoleFromUserMutation,
 } from '../userEndpoints';
 import { useGetRolesQuery } from '@/features/roles/roleEndpoints';
+import { useGetScopesQuery } from '@/shared/api/scopeEndpoints';
 import { assignRoleSchema, type AssignRoleSchema } from '../schemas';
 import { useToastStore } from '@/shared/stores/toastStore';
 import { Authorized } from '@/shared/components/Authorized';
@@ -21,7 +22,7 @@ export default function UserDetailPage() {
   const { tenantId, userId } = useParams<{ tenantId: string; userId: string }>();
   const navigate = useNavigate();
   const toast = useToastStore();
-  const [revokingRoleId, setRevokingRoleId] = useState<string | null>(null);
+  const [revokingAssignment, setRevokingAssignment] = useState<{ roleId: string; scopeId: string | null } | null>(null);
   const [showAssignForm, setShowAssignForm] = useState(false);
 
   const { data: user, isLoading, isError, refetch } = useGetUserByIdQuery(
@@ -29,6 +30,7 @@ export default function UserDetailPage() {
     { skip: !tenantId || !userId || userId === 'new' }
   );
   const { data: roles = [] } = useGetRolesQuery({ tenantId: tenantId! }, { skip: !tenantId });
+  const { data: scopes = [] } = useGetScopesQuery({ tenantId: tenantId! }, { skip: !tenantId });
   const { data: roleAssignments = [] } = useGetUserRoleAssignmentsQuery(
     { tenantId: tenantId!, userId: userId! },
     { skip: !tenantId || !userId || userId === 'new' }
@@ -72,14 +74,19 @@ export default function UserDetailPage() {
   };
 
   const handleRevokeRole = async () => {
-    if (!revokingRoleId || !tenantId || !userId) return;
+    if (!revokingAssignment || !tenantId || !userId) return;
     try {
-      await revokeRole({ tenantId, userId, roleId: revokingRoleId }).unwrap();
+      await revokeRole({
+        tenantId,
+        userId,
+        roleId: revokingAssignment.roleId,
+        scopeId: revokingAssignment.scopeId ?? undefined,
+      }).unwrap();
       toast.success('Role revoked', 'Role assignment removed.');
     } catch {
       toast.error('Revoke failed', 'Could not revoke role. Please try again.');
     } finally {
-      setRevokingRoleId(null);
+      setRevokingAssignment(null);
     }
   };
 
@@ -136,7 +143,7 @@ export default function UserDetailPage() {
             <p>{new Date(user.createdAt).toLocaleDateString()}</p>
           </div>
         </div>
-        <Authorized action="user:update" resource="users">
+        <Authorized action="user:update" resource="users" fallback={null}>
           <div className="pt-2">
             <button
               onClick={() => void handleToggleActive()}
@@ -158,7 +165,7 @@ export default function UserDetailPage() {
             <h2 className="text-sm font-medium">Role assignments</h2>
             <p className="text-xs text-muted-foreground">Roles assigned to this user.</p>
           </div>
-          <Authorized action="user:update" resource="users">
+          <Authorized action="user:update" resource="users" fallback={null}>
             <button onClick={() => setShowAssignForm((s) => !s)} className="text-xs px-3 py-1.5 border rounded-md hover:bg-accent transition-colors">
               + Assign role
             </button>
@@ -210,7 +217,10 @@ export default function UserDetailPage() {
                 <div>
                   <p className="font-medium">{a.roleName || a.roleId}</p>
                   <p className="text-xs text-muted-foreground mt-0.5">
-                    Assigned {new Date(a.assignedAt).toLocaleDateString()}
+                    {a.scopeId
+                      ? (() => { const s = scopes.find((x) => x.id === a.scopeId); return s ? `${s.type} — ${s.name}` : a.scopeId.slice(0, 8) + '…'; })()
+                      : 'Tenant-wide'}
+                    {' · '}Assigned {new Date(a.assignedAt).toLocaleDateString()}
                     {a.expiresAt ? ` · Expires ${new Date(a.expiresAt).toLocaleDateString()}` : ''}
                   </p>
                 </div>
@@ -223,7 +233,7 @@ export default function UserDetailPage() {
                   {a.isActive && (
                     <Authorized action="user:update" resource="users" fallback={null}>
                       <button
-                        onClick={() => setRevokingRoleId(a.roleId)}
+                        onClick={() => setRevokingAssignment({ roleId: a.roleId, scopeId: a.scopeId })}
                         className="text-xs px-3 py-1 border border-red-200 text-red-600 rounded hover:bg-red-50 transition-colors"
                       >
                         Revoke
@@ -238,14 +248,14 @@ export default function UserDetailPage() {
       </div>
 
       <ConfirmDialog
-        open={!!revokingRoleId}
+        open={!!revokingAssignment}
         title="Revoke role"
         description="This will deactivate the role assignment for this user. The user will lose access associated with this role."
         confirmLabel="Revoke"
         destructive
         isLoading={isRevoking}
         onConfirm={handleRevokeRole}
-        onCancel={() => setRevokingRoleId(null)}
+        onCancel={() => setRevokingAssignment(null)}
       />
     </div>
   );

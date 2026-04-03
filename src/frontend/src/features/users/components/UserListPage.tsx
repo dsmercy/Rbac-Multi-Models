@@ -106,14 +106,12 @@ export default function UserListPage() {
                     <td className="px-4 py-3 text-muted-foreground">{new Date(user.createdAt).toLocaleDateString()}</td>
                     <td className="px-4 py-3">
                       <div className="flex items-center justify-end gap-2">
-                        <Authorized action="user:update" resource="users">
-                          <button
-                            onClick={() => navigate(`/${tenantId}/users/${user.id}`)}
-                            className="text-xs px-3 py-1 border rounded hover:bg-accent transition-colors"
-                          >
-                            Manage
-                          </button>
-                        </Authorized>
+                        <button
+                          onClick={() => navigate(`/${tenantId}/users/${user.id}`)}
+                          className="text-xs px-3 py-1 border rounded hover:bg-accent transition-colors"
+                        >
+                          Manage
+                        </button>
                       </div>
                     </td>
                   </tr>

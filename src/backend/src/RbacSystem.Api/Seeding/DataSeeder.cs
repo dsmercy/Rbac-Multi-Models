@@ -164,6 +164,8 @@ public sealed class DataSeeder
         ("user:delete",          "user",       "delete",    "Delete / deactivate users"),
         // Roles
         ("role:create",          "role",       "create",    "Create roles"),
+        ("role:read",            "role",       "read",      "Read roles"),
+        ("role:update",          "role",       "update",    "Update roles and their permissions"),
         ("role:assign",          "role",       "assign",    "Assign roles to users"),
         ("role:delete",          "role",       "delete",    "Delete roles"),
         // Projects
@@ -189,6 +191,11 @@ public sealed class DataSeeder
         // HR / People
         ("employee:read",        "employee",   "read",      "View employee records"),
         ("employee:update",      "employee",   "update",    "Update employee records"),
+        // Permissions
+        ("permission:create",    "permission", "create",    "Create permissions"),
+        ("permission:read",      "permission", "read",      "Read permissions"),
+        ("permission:update",    "permission", "update",    "Update permissions"),
+        ("permission:delete",    "permission", "delete",    "Delete permissions"),
         // Policies & Delegations
         ("policies:read",        "policies",   "read",      "Read ABAC policies"),
         ("policies:create",      "policies",   "create",    "Create ABAC policies"),

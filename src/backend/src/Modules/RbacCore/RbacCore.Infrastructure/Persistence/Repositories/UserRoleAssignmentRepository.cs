@@ -18,6 +18,12 @@ public sealed class UserRoleAssignmentRepository : IUserRoleAssignmentRepository
                         a.ScopeId == scopeId)
             .ToListAsync(ct);
 
+    public async Task<IReadOnlyList<UserRoleAssignment>> GetAllActiveByUserAsync(
+        Guid userId, Guid tenantId, CancellationToken ct = default)
+        => await _context.UserRoleAssignments
+            .Where(a => a.UserId == userId && a.TenantId == tenantId)
+            .ToListAsync(ct);
+
     public async Task<IReadOnlyList<UserRoleAssignment>> GetActiveByRoleAsync(
         Guid roleId, Guid tenantId, CancellationToken ct = default)
     {

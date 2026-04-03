@@ -22,8 +22,13 @@ public sealed class RevokeRoleFromUserCommandHandler
         RevokeRoleFromUserCommand command,
         CancellationToken cancellationToken)
     {
-        var assignments = await _assignmentRepository.GetActiveByUserAsync(
-            command.UserId, command.TenantId, command.ScopeId, cancellationToken);
+        // When scopeId is provided, look up the exact scoped assignment.
+        // When null, search across all scopes to find the first matching active assignment.
+        var assignments = command.ScopeId.HasValue
+            ? await _assignmentRepository.GetActiveByUserAsync(
+                command.UserId, command.TenantId, command.ScopeId, cancellationToken)
+            : await _assignmentRepository.GetAllActiveByUserAsync(
+                command.UserId, command.TenantId, cancellationToken);
 
         var target = assignments.FirstOrDefault(a => a.RoleId == command.RoleId);
 

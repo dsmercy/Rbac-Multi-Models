@@ -7,6 +7,10 @@ public interface IUserRoleAssignmentRepository
     Task<IReadOnlyList<UserRoleAssignment>> GetActiveByUserAsync(
         Guid userId, Guid tenantId, Guid? scopeId, CancellationToken ct = default);
 
+    /// <summary>Returns all active assignments for a user across every scope (no scope filter).</summary>
+    Task<IReadOnlyList<UserRoleAssignment>> GetAllActiveByUserAsync(
+        Guid userId, Guid tenantId, CancellationToken ct = default);
+
     Task<IReadOnlyList<UserRoleAssignment>> GetActiveByRoleAsync(
         Guid roleId, Guid tenantId, CancellationToken ct = default);
 
@@ -20,7 +24,7 @@ public interface IUserRoleAssignmentRepository
  
     Task SaveChangesAsync(CancellationToken ct = default);
     /// <summary>
-    /// Used exclusively by LoginCommandHandler — bypasses global query filter
+    /// Used exclusively by LoginCommandHandler ï¿½ bypasses global query filter
     /// because no JWT exists yet during authentication.
     /// </summary>
     Task<IReadOnlyList<UserRoleAssignment>> GetActiveByUserIgnoreFiltersAsync(

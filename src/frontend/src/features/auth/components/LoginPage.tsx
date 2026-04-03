@@ -98,7 +98,7 @@ export default function LoginPage() {
               type="email"
               {...register('email')}
               className="w-full px-3 py-2 border rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-ring"
-              autoComplete="email"
+              autoComplete="on"
             />
             {errors.email && (
               <p className="text-xs text-destructive">{errors.email.message}</p>

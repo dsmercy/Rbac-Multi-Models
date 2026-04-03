@@ -17,6 +17,14 @@ public sealed record PermissionDto(
     string Action,
     string? Description);
 
+public sealed record ScopeDto(
+    Guid Id,
+    Guid TenantId,
+    string Name,
+    string Type,        // "Organization" | "Department" | "Project" | "Custom"
+    Guid? ParentId,
+    DateTimeOffset CreatedAt);
+
 public sealed record UserRoleAssignmentDto(
     Guid Id,
     Guid TenantId,

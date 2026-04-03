@@ -108,21 +108,23 @@ export const userEndpoints = apiSlice.injectEndpoints({
       ],
     }),
 
-    revokeRoleFromUser: builder.mutation<void, { tenantId: string; userId: string; roleId: string }>({
-      query: ({ tenantId, userId, roleId }) => ({
+    revokeRoleFromUser: builder.mutation<void, { tenantId: string; userId: string; roleId: string; scopeId?: string }>({
+      query: ({ tenantId, userId, roleId, scopeId }) => ({
         url: `/tenants/${tenantId}/users/${userId}/roles/${roleId}`,
         method: 'DELETE',
+        params: scopeId ? { scopeId } : undefined,
       }),
-      // Optimistic update: mark the assignment inactive immediately so the
-      // revoke is reflected in the UI without waiting for the server round-trip.
-      // Cast required: updateQueryData can't infer injected endpoint names within injectEndpoints
-      async onQueryStarted({ tenantId, userId, roleId }, { dispatch, queryFulfilled }) {
+      // Optimistic update: mark the matching assignment inactive immediately.
+      // Match on both roleId AND scopeId so only the targeted assignment is hidden.
+      async onQueryStarted({ tenantId, userId, roleId, scopeId }, { dispatch, queryFulfilled }) {
         const patchResult = dispatch(
           (apiSlice.util.updateQueryData as any)(
             'getUserRoleAssignments',
             { tenantId, userId },
             (draft: UserRoleAssignment[]) => {
-              const assignment = draft.find((a) => a.roleId === roleId && a.isActive);
+              const assignment = draft.find(
+                (a) => a.roleId === roleId && a.isActive && (a.scopeId ?? null) === (scopeId ?? null),
+              );
               if (assignment) assignment.isActive = false;
             },
           ),

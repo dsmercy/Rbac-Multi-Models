@@ -24,7 +24,7 @@ public sealed class RbacCoreService : IRbacCoreService
         _assignmentRepository = assignmentRepository;
     }
 
-    public Task<IReadOnlyList<RoleDto>> GetUserRolesAsync(
+    public Task<IReadOnlyList<UserRoleAssignmentDto>> GetUserRolesAsync(
         Guid userId, Guid tenantId, Guid? scopeId, CancellationToken ct = default)
         => _sender.Send(new GetUserRolesQuery(userId, tenantId, scopeId), ct);
 

@@ -13,6 +13,13 @@ public sealed class ScopeRepository : IScopeRepository
     public Task<Scope?> GetByIdAsync(Guid scopeId, CancellationToken ct = default)
         => _context.Scopes.FirstOrDefaultAsync(s => s.Id == scopeId, ct);
 
+    public async Task<IReadOnlyList<Scope>> GetAllByTenantAsync(Guid tenantId, CancellationToken ct = default)
+        => await _context.Scopes
+            .Where(s => s.TenantId == tenantId)
+            .OrderBy(s => s.Type)
+            .ThenBy(s => s.Name)
+            .ToListAsync(ct);
+
     public async Task<IReadOnlyList<Scope>> GetAncestorsAsync(
         Guid scopeId, Guid tenantId, CancellationToken ct = default)
     {

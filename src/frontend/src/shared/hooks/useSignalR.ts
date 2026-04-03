@@ -92,6 +92,12 @@ export function useSignalR(tenantId: string | undefined): void {
         for (const tag of affectedTypes) {
           tags.push({ type: tag, id: payload.resourceId });
         }
+
+        // "assignment" events carry resourceId = userId. getUserRoleAssignments provides
+        // { type: 'User', id: 'roles-{userId}' } — add the prefixed tag so it refetches.
+        if (payload.type === 'assignment') {
+          tags.push({ type: 'User', id: `roles-${payload.resourceId}` });
+        }
       }
 
       if (tags.length > 0) {

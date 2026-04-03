@@ -9,8 +9,8 @@ namespace RbacCore.Application.Services;
 /// </summary>
 public interface IRbacCoreService
 {
-    /// <summary>Returns all active roles for a user within a given scope (null = tenant-wide).</summary>
-    Task<IReadOnlyList<RoleDto>> GetUserRolesAsync(
+    /// <summary>Returns all active role assignments for a user within a given scope (null = tenant-wide).</summary>
+    Task<IReadOnlyList<UserRoleAssignmentDto>> GetUserRolesAsync(
         Guid userId, Guid tenantId, Guid? scopeId, CancellationToken ct = default);
 
     /// <summary>Returns all permissions attached to a role.</summary>
@@ -34,7 +34,7 @@ public interface IRbacCoreService
     Task<IReadOnlyList<Guid>> GetAncestorScopeIdsAsync(
         Guid scopeId, Guid tenantId, CancellationToken ct = default);
 
-    /// <summary>Fast existence check — used for assignment validation.</summary>
+    /// <summary>Fast existence check ï¿½ used for assignment validation.</summary>
     Task<bool> RoleExistsAsync(
         Guid roleId, Guid tenantId, CancellationToken ct = default);
 

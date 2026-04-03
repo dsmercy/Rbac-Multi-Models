@@ -5,7 +5,7 @@ using RbacCore.Domain.Interfaces;
 namespace RbacCore.Application.Queries;
 
 public sealed class GetUserRolesQueryHandler
-    : IQueryHandler<GetUserRolesQuery, IReadOnlyList<RoleDto>>
+    : IQueryHandler<GetUserRolesQuery, IReadOnlyList<UserRoleAssignmentDto>>
 {
     private readonly IUserRoleAssignmentRepository _assignmentRepository;
     private readonly IRoleRepository _roleRepository;
@@ -18,32 +18,34 @@ public sealed class GetUserRolesQueryHandler
         _roleRepository = roleRepository;
     }
 
-    public async Task<IReadOnlyList<RoleDto>> Handle(
+    public async Task<IReadOnlyList<UserRoleAssignmentDto>> Handle(
         GetUserRolesQuery query,
         CancellationToken cancellationToken)
     {
-        var assignments = await _assignmentRepository.GetActiveByUserAsync(
-            query.UserId, query.TenantId, query.ScopeId, cancellationToken);
+        // When ScopeId is null (no filter requested), return ALL assignments across every scope.
+        // GetActiveByUserAsync with null would only return ScopeId IS NULL (tenant-wide) records.
+        var assignments = query.ScopeId.HasValue
+            ? await _assignmentRepository.GetActiveByUserAsync(query.UserId, query.TenantId, query.ScopeId, cancellationToken)
+            : await _assignmentRepository.GetAllActiveByUserAsync(query.UserId, query.TenantId, cancellationToken);
 
-        var roles = new List<RoleDto>();
+        var result = new List<UserRoleAssignmentDto>();
 
         foreach (var assignment in assignments)
         {
             var role = await _roleRepository.GetByIdAsync(assignment.RoleId, cancellationToken);
-            if (role is null) continue;
 
-            var permissions = role.Permissions
-                .Select(rp => new PermissionDto(
-                    rp.PermissionId,
-                    query.TenantId,
-                    string.Empty, string.Empty, string.Empty, null))
-                .ToList();
-
-            roles.Add(new RoleDto(
-                role.Id, role.TenantId, role.Name,
-                role.Description, role.IsSystemRole, role.CreatedAt, permissions));
+            result.Add(new UserRoleAssignmentDto(
+                assignment.Id,
+                assignment.TenantId,
+                assignment.UserId,
+                assignment.RoleId,
+                role?.Name ?? string.Empty,
+                assignment.ScopeId,
+                assignment.IsActive,
+                assignment.ExpiresAt,
+                assignment.CreatedAt));
         }
 
-        return roles.AsReadOnly();
+        return result.AsReadOnly();
     }
 }

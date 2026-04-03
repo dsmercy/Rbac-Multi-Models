@@ -69,8 +69,7 @@ public sealed class AuthController : ControllerBase
         var user = await _sender.Send(new GetUserByIdQuery(userId, tenantId), ct);
         if (user is null) return NotFound();
 
-        var isSuperAdmin = User.FindFirstValue("is_super_admin") == "True"
-                        || User.FindFirstValue("is_super_admin") == "true";
+        var isSuperAdmin = User.FindFirstValue("roles") == "SuperAdmin";
 
         return Ok(new MeResponse(
             user.Id,
