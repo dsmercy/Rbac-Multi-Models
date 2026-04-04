@@ -15,10 +15,11 @@ import { useSignalRStore } from '@/shared/stores/signalRStore';
  * TenantId is serialised as a lowercase UUID string by System.Text.Json.
  */
 interface RbacInvalidatedPayload {
-  type:        string;
-  tenantId:    string;   // UUID string, e.g. "3fa85f64-5717-4562-b3fc-2c963f66afa6"
-  resourceId:  string | null;
-  occurredAt:  string;
+  type:          string;
+  tenantId:      string;   // UUID string, e.g. "3fa85f64-5717-4562-b3fc-2c963f66afa6"
+  resourceId:    string | null;
+  occurredAt:    string;
+  secondaryId?:  string | null; // e.g. roleId for assignment events
 }
 
 // ── Constants ─────────────────────────────────────────────────────────────────
@@ -97,6 +98,10 @@ export function useSignalR(tenantId: string | undefined): void {
         // { type: 'User', id: 'roles-{userId}' } — add the prefixed tag so it refetches.
         if (payload.type === 'assignment') {
           tags.push({ type: 'User', id: `roles-${payload.resourceId}` });
+          // secondaryId = roleId for assignment events — bust the members list for that role.
+          if (payload.secondaryId) {
+            tags.push({ type: 'Role', id: `members-${payload.secondaryId}` });
+          }
         }
       }
 

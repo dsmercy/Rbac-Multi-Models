@@ -2,7 +2,8 @@ import { lazy } from 'react';
 import type { AppRoute } from '@/routes/types';
 
 export const permissionRoutes: AppRoute[] = [
-  { path: 'permissions', component: lazy(() => import('./components/PermissionMatrixPage')) },
+  { path: 'permissions', component: lazy(() => import('./components/ManageRolePermissionsPage')) },
+  { path: 'permissions/matrix', component: lazy(() => import('./components/PermissionMatrixPage')) },
 ];
 
 export {

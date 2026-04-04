@@ -19,4 +19,5 @@ public sealed record RbacInvalidatedMessage(
     string          Type,
     Guid            TenantId,
     Guid?           ResourceId,
-    DateTimeOffset  OccurredAt);
+    DateTimeOffset  OccurredAt,
+    Guid?           SecondaryId = null);

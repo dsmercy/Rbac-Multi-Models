@@ -64,10 +64,10 @@ export class ErrorBoundary extends Component<Props, State> {
               Try again
             </button>
             <button
-              onClick={() => window.location.assign('/')}
+              onClick={() => { this.handleReset(); window.history.back(); }}
               className="px-4 py-2 text-sm border rounded-md hover:bg-accent transition-colors"
             >
-              Go to home
+              Go back
             </button>
           </div>
         </div>

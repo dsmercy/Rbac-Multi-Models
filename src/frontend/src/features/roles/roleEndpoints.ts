@@ -1,5 +1,5 @@
 import { apiSlice } from '@/shared/api/apiSlice';
-import type { Role, CreateRoleInput, UpdateRoleInput } from './types';
+import type { Role, CreateRoleInput, UpdateRoleInput, RoleMember } from './types';
 import type { Permission } from '@/features/permissions/types';
 
 export const roleEndpoints = apiSlice.injectEndpoints({
@@ -74,6 +74,11 @@ export const roleEndpoints = apiSlice.injectEndpoints({
         { type: 'Permission', id: 'LIST' },
       ],
     }),
+
+    getRoleMembers: builder.query<RoleMember[], { tenantId: string; roleId: string }>({
+      query: ({ tenantId, roleId }) => `/tenants/${tenantId}/roles/${roleId}/members`,
+      providesTags: (_r, _e, { roleId }) => [{ type: 'Role' as const, id: `members-${roleId}` }],
+    }),
   }),
   overrideExisting: false,
 });
@@ -87,4 +92,5 @@ export const {
   useGetRolePermissionsQuery,
   useAssignPermissionToRoleMutation,
   useRevokePermissionFromRoleMutation,
+  useGetRoleMembersQuery,
 } = roleEndpoints;

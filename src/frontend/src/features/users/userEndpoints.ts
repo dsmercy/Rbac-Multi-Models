@@ -75,7 +75,7 @@ export const userEndpoints = apiSlice.injectEndpoints({
                 userId,
                 roleId: body.roleId,
                 roleName: '',           // filled in from server response on success
-                scopeId: body.scopeId,
+                scopeId: body.scopeId ?? '',
                 assignedAt: new Date().toISOString(),
                 expiresAt: body.expiresAt ?? null,
                 isActive: true,

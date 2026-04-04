@@ -35,3 +35,12 @@ public sealed record UserRoleAssignmentDto(
     bool IsActive,
     DateTimeOffset? ExpiresAt,
     DateTimeOffset CreatedAt);
+
+public sealed record RoleMemberDto(
+    Guid AssignmentId,
+    Guid UserId,
+    string Email,
+    string DisplayName,
+    Guid? ScopeId,
+    DateTimeOffset AssignedAt,
+    DateTimeOffset? ExpiresAt);

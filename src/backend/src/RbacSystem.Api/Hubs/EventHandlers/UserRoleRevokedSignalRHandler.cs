@@ -20,6 +20,6 @@ public sealed class UserRoleRevokedSignalRHandler : INotificationHandler<UserRol
                .Group($"tenant:{notification.TenantId}")
                .SendAsync(
                    "rbac:invalidated",
-                   new RbacInvalidatedMessage("assignment", notification.TenantId, notification.UserId, notification.OccurredAt),
+                   new RbacInvalidatedMessage("assignment", notification.TenantId, notification.UserId, notification.OccurredAt, notification.RoleId),
                    cancellationToken);
 }

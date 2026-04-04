@@ -101,7 +101,13 @@ export default function PolicyBuilderPage() {
   useEffect(() => {
     if (policy) {
       reset({ name: policy.name, description: policy.description ?? '', effect: policy.effect });
-      setConditionTree(policy.conditionTree);
+      // Guard: backend may return null or a tree without conditions array
+      const tree = policy.conditionTree;
+      setConditionTree(
+        tree && Array.isArray(tree.conditions)
+          ? tree
+          : { ...DEFAULT_CONDITION_TREE, operator: tree?.operator ?? 'And' }
+      );
     }
   }, [policy, reset]);
 
@@ -142,7 +148,7 @@ export default function PolicyBuilderPage() {
       } else {
         const created = await createPolicy({ tenantId: tenantId!, body: payload }).unwrap();
         toast.success('Policy created', `"${created.name}" is now active.`);
-        navigate(`/${tenantId}/policies/${created.id}/edit`);
+        navigate(`/${tenantId}/policies/${created.id}`);
       }
     } catch {
       toast.error('Save failed', 'Could not save the policy. Please try again.');
@@ -245,11 +251,11 @@ export default function PolicyBuilderPage() {
                 <span className="text-xs text-muted-foreground">conditions</span>
               </div>
 
-              {conditionTree.conditions.length === 0 ? (
+              {(conditionTree.conditions ?? []).length === 0 ? (
                 <p className="text-sm text-muted-foreground text-center py-4">No conditions. Add one below.</p>
               ) : (
                 <div className="space-y-2">
-                  {conditionTree.conditions.map((leaf, i) => (
+                  {(conditionTree.conditions ?? []).map((leaf, i) => (
                     <ConditionLeafEditor
                       key={i}
                       leaf={leaf}

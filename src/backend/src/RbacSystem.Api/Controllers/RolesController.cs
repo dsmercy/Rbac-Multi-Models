@@ -204,6 +204,24 @@ public sealed class RolesController : ControllerBase
         return NoContent();
     }
 
+    /// <summary>List all active members (users) assigned to a role.</summary>
+    /// <param name="tid">Tenant UUID.</param>
+    /// <param name="roleId">Role UUID.</param>
+    /// <response code="200">Returns the list of members with user details.</response>
+    /// <response code="401">Missing or invalid JWT.</response>
+    /// <response code="403">Tenant ID mismatch.</response>
+    /// <response code="404">Role not found.</response>
+    [HttpGet("{roleId:guid}/members")]
+    [ProducesResponseType(typeof(IReadOnlyList<RoleMemberDto>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> GetRoleMembers(Guid tid, Guid roleId, CancellationToken ct)
+    {
+        var result = await _sender.Send(new ListRoleMembersQuery(tid, roleId), ct);
+        return Ok(result);
+    }
+
     /// <summary>List active role assignments for a user (legacy route — prefer <c>GET /users/{uid}/roles</c>).</summary>
     /// <param name="tid">Tenant UUID.</param>
     /// <param name="userId">User UUID.</param>

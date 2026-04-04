@@ -11,10 +11,28 @@ import { cn } from '@/shared/utils/cn';
 
 const OnboardingWizard = lazy(() => import('@/features/onboarding/components/OnboardingWizard'));
 
-const navItems = [
+interface NavItem {
+  label: string;
+  path: string;
+  children?: { label: string; path: string }[];
+}
+
+const navItems: NavItem[] = [
   { label: 'Dashboard', path: 'dashboard' },
-  { label: 'Roles', path: 'roles' },
-  { label: 'Permissions', path: 'permissions' },
+  {
+    label: 'Roles',
+    path: 'roles',
+    children: [
+      { label: 'Role Members', path: 'roles/members' },
+    ],
+  },
+  {
+    label: 'Permissions',
+    path: 'permissions',
+    children: [
+      { label: 'Permission Matrix', path: 'permissions/matrix' },
+    ],
+  },
   { label: 'Users', path: 'users' },
   { label: 'Policies', path: 'policies' },
   { label: 'Delegations', path: 'delegations' },
@@ -83,21 +101,40 @@ export default function TenantLayout() {
 
           <nav className="flex-1 px-2 py-3 space-y-0.5" aria-label="Tenant navigation">
             {navItems.map((item) => (
-              <NavLink
-                key={item.path}
-                to={`/${tenantId}/${item.path}`}
-                className={({ isActive }) =>
-                  cn(
-                    'block px-3 py-2 rounded-md text-sm transition-colors',
-                    isActive
-                      ? 'bg-primary text-primary-foreground'
-                      : 'text-foreground hover:bg-accent hover:text-accent-foreground'
-                  )
-                }
-                aria-current={undefined}
-              >
-                {item.label}
-              </NavLink>
+              <div key={item.path}>
+                <NavLink
+                  to={`/${tenantId}/${item.path}`}
+                  end={!!item.children}
+                  className={({ isActive }) =>
+                    cn(
+                      'block px-3 py-2 rounded-md text-sm transition-colors',
+                      isActive
+                        ? 'bg-primary text-primary-foreground'
+                        : 'text-foreground hover:bg-accent hover:text-accent-foreground'
+                    )
+                  }
+                  aria-current={undefined}
+                >
+                  {item.label}
+                </NavLink>
+                {item.children?.map((child) => (
+                  <NavLink
+                    key={child.path}
+                    to={`/${tenantId}/${child.path}`}
+                    className={({ isActive }) =>
+                      cn(
+                        'block pl-7 pr-3 py-1.5 rounded-md text-xs transition-colors',
+                        isActive
+                          ? 'bg-primary/80 text-primary-foreground'
+                          : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground'
+                      )
+                    }
+                    aria-current={undefined}
+                  >
+                    {child.label}
+                  </NavLink>
+                ))}
+              </div>
             ))}
           </nav>
 

@@ -135,7 +135,7 @@ export default function PolicyListPage() {
                     <div className="flex items-center justify-end gap-2">
                       <Authorized action="policy:update" resource="policies">
                         <button
-                          onClick={() => navigate(`/${tenantId}/policies/${policy.id}/edit`)}
+                          onClick={() => navigate(`/${tenantId}/policies/${policy.id}`)}
                           className="text-xs px-3 py-1 border rounded hover:bg-accent transition-colors"
                         >
                           Edit

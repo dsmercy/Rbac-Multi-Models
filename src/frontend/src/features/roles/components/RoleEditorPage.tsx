@@ -1,4 +1,4 @@
-import { useEffect, useMemo } from 'react';
+import { useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -6,11 +6,7 @@ import {
   useGetRoleByIdQuery,
   useCreateRoleMutation,
   useUpdateRoleMutation,
-  useGetRolePermissionsQuery,
-  useAssignPermissionToRoleMutation,
-  useRevokePermissionFromRoleMutation,
 } from '../roleEndpoints';
-import { useGetPermissionsQuery } from '@/features/permissions/permissionEndpoints';
 import { createRoleSchema, type CreateRoleSchema } from '../schemas';
 import { useToastStore } from '@/shared/stores/toastStore';
 import { Authorized } from '@/shared/components/Authorized';
@@ -28,21 +24,8 @@ export default function RoleEditorPage() {
     { skip: !isEdit || !tenantId || !roleId }
   );
 
-  const { data: allPermissions = [], isLoading: permsLoading } = useGetPermissionsQuery(
-    { tenantId: tenantId! },
-    { skip: !isEdit || !tenantId }
-  );
-
-  const { data: rolePermissions = [] } = useGetRolePermissionsQuery(
-    { tenantId: tenantId!, roleId: roleId! },
-    { skip: !isEdit || !tenantId || !roleId }
-  );
-
   const [createRole, { isLoading: isCreating }] = useCreateRoleMutation();
   const [updateRole, { isLoading: isUpdating }] = useUpdateRoleMutation();
-  const [assignPermission] = useAssignPermissionToRoleMutation();
-  const [revokePermission] = useRevokePermissionFromRoleMutation();
-
   const isSaving = isCreating || isUpdating;
 
   const { register, handleSubmit, reset, formState: { errors } } = useForm<CreateRoleSchema>({
@@ -65,29 +48,6 @@ export default function RoleEditorPage() {
       }
     } catch {
       toast.error('Save failed', 'Could not save the role. Please try again.');
-    }
-  };
-
-  const assignedIds = useMemo(() => new Set(rolePermissions.map((p) => p.id)), [rolePermissions]);
-
-  const permissionsByResource = useMemo(() => {
-    const grouped: Record<string, typeof allPermissions> = {};
-    for (const p of allPermissions) {
-      (grouped[p.resourceType] ??= []).push(p);
-    }
-    return grouped;
-  }, [allPermissions]);
-
-  const handlePermissionToggle = async (permissionCode: string, checked: boolean) => {
-    if (!isEdit || !tenantId || !roleId) return;
-    try {
-      if (checked) {
-        await assignPermission({ tenantId, roleId, permissionCode }).unwrap();
-      } else {
-        await revokePermission({ tenantId, roleId, permissionCode }).unwrap();
-      }
-    } catch {
-      toast.error('Permission update failed', 'Could not update permission. Please try again.');
     }
   };
 
@@ -173,59 +133,6 @@ export default function RoleEditorPage() {
             </div>
           </Authorized>
         </form>
-      )}
-
-      {/* Permission Matrix — edit mode only */}
-      {isEdit && (
-        <div className="border rounded-lg overflow-hidden">
-          <div className="px-5 py-3 bg-muted/50 border-b">
-            <h2 className="text-sm font-medium">Permissions</h2>
-            <p className="text-xs text-muted-foreground mt-0.5">
-              Check permissions to grant them to this role.
-            </p>
-          </div>
-
-          {permsLoading ? (
-            <div className="p-4 space-y-2">
-              {Array.from({ length: 3 }).map((_, i) => (
-                <SkeletonBlock key={i} className="h-8 w-full" />
-              ))}
-            </div>
-          ) : allPermissions.length === 0 ? (
-            <p className="text-sm text-muted-foreground text-center py-8">
-              No permissions defined for this tenant yet.
-            </p>
-          ) : (
-            <div className="divide-y">
-              {Object.entries(permissionsByResource).map(([resource, perms]) => (
-                <div key={resource} className="px-5 py-3">
-                  <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-2">{resource}</p>
-                  <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
-                    {perms.map((perm) => (
-                      <Authorized key={perm.id} action="role:update" resource="roles" fallback={
-                        <label className="flex items-center gap-2 text-sm opacity-50 cursor-not-allowed">
-                          <input type="checkbox" checked={assignedIds.has(perm.id)} disabled className="rounded" readOnly />
-                          <span>{perm.action}</span>
-                        </label>
-                      }>
-                        <label className="flex items-center gap-2 text-sm cursor-pointer hover:text-foreground">
-                          <input
-                            type="checkbox"
-                            checked={assignedIds.has(perm.id)}
-                            disabled={role?.isSystem}
-                            onChange={(e) => void handlePermissionToggle(perm.code, e.target.checked)}
-                            className="rounded"
-                          />
-                          <span>{perm.action}</span>
-                        </label>
-                      </Authorized>
-                    ))}
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
       )}
     </div>
   );
